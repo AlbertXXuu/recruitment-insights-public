@@ -1,0 +1,5 @@
+﻿job_id,title,company,location,salary_text,salary_min,salary_max,currency,salary_period,education,experience,description,source_url,updated_at
+YOUR-001,Python 后端工程师,示例科技 17（模拟）,北京,27–34K/月,27000,34000,CNY,month,大专,3–5年,"【课程模拟岗位，不是真实招聘】
+岗位职责：参与需求分析、模块实现和测试。
+技能要求：Python SQL Docker Git。
+此条目用于验证筛选、薪资统计、技能追溯和更新流程。",,2026-09-24T00:00:00Z

@@ -1,0 +1,22 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+outputs/
+*.sqlite3*
+*.db
+*.db-*
+*.log
+*.pid
+*.zip
+.env
+.env.*
+!.env.example
+credentials.json
+token.json
+id_rsa
+id_ed25519
+.playwright-cli/
+# Locally collected or supplied third-party text is not part of this edition.
+data/public_jobs.json
+data/cloudflare_snapshot.json

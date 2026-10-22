@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>recruitment-insights · 招聘信息实时数据分析系统</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body>
+<aside class="sidebar">
+  <a class="brand" href="/" aria-label="recruitment-insights首页"><span>recruitment-insights<small>招聘数据工作台</small></span></a>
+  <nav aria-label="主导航">
+    <button class="nav active" data-view="overview">数据总览</button>
+    <button class="nav" data-view="explore">岗位探索</button>
+    <button class="nav" data-view="management" data-roles="admin" hidden>岗位管理</button>
+    <button class="nav" data-view="import" data-roles="admin boss hr" hidden>数据接入</button>
+    <button class="nav" data-view="provenance" data-roles="admin boss hr" hidden>更新记录</button>
+    <button class="nav" data-view="quality" data-roles="admin boss hr" hidden>数据质量</button>
+    <button class="nav" data-view="company" data-roles="boss hr" hidden>企业岗位</button>
+    <button class="nav" data-view="team" data-roles="boss" hidden>成员授权</button>
+    <button class="nav" data-view="favorites" data-roles="candidate" hidden>我的收藏</button>
+    <button class="nav" data-view="resume" data-roles="candidate" hidden>我的简历</button>
+  </nav>
+  <div class="sidebar-bottom"><span id="client-name">本机工作台</span><p>课程设计 · v2.5</p></div>
+</aside>
+<main>
+  <header class="topbar"><div class="account-menu"><div class="account-identity"><span id="account-name"></span><small id="account-role"></small></div><button id="logout" class="secondary">退出登录</button></div></header>
+  <div class="workspace">
+  <section class="page-heading"><div><h1 id="page-title">数据总览</h1><p id="page-description">查看当前样本的地区、岗位、技能与招聘要求分布。</p></div><div class="source-action"><button id="sync" class="primary" hidden>更新 Cloudflare 岗位</button><small>仅更新该公司的技术岗位来源</small></div></section>
+  <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+  <section class="scope-bar" aria-label="数据筛选">
+    <label>数据范围<select id="dataset"><option value="real" selected>真实 / 自有数据</option><option value="demo">课程模拟数据</option></select></label>
+    <label id="scope-label" hidden>可见范围<select id="scope"><option value="all">公开 + 本企业</option><option value="public">公开岗位</option><option value="company">仅本企业</option></select></label>
+    <label class="search-label">搜索岗位<input id="q" type="search" placeholder="岗位名称、公司或描述…"></label>
+    <label>地区<select id="location"><option value="">全部地区</option></select></label>
+    <label>岗位类别<select id="category"><option value="">全部类别</option></select></label>
+    <button id="reset" class="quiet">清空筛选</button>
+    <details class="filter-details"><summary>更多筛选<span>学历、经验、来源</span></summary><div class="extra-filters"><label>学历<select id="education"><option value="">全部学历</option></select></label><label>经验<select id="experience"><option value="">全部经验</option></select></label><label>来源<select id="source"><option value="">全部来源</option></select></label></div></details><div id="skill-filter"></div>
+  </section>
+  <p class="scope-note" id="scope-note">正在读取数据…</p>
+  <section id="overview" class="view">
+    <div class="metrics" id="metrics"></div>
+    <div class="chart-grid">
+      <article class="panel"><div class="panel-head"><div><h2>地区分布</h2></div><span class="subtle">前 7 项 · 单岗可关联多地</span></div><div id="location-chart" class="bars"></div></article>
+      <article class="panel"><div class="panel-head"><div><h2>岗位类别</h2></div><span class="subtle">标题规则 · 前 7 类</span></div><div id="category-chart" class="bars"></div></article>
+      <article class="panel"><div class="panel-head"><div><h2>技能需求</h2></div><span class="subtle">前 7 项 · 每岗每技能计一次</span></div><div id="skills-chart" class="bars"></div></article>
+      <article class="panel"><div class="panel-head"><div><h2>薪资区间</h2></div><label class="currency-label">币种<select id="currency"><option value="CNY">CNY / 月</option><option value="USD">USD / 月</option></select></label></div><div id="salary-summary"></div><div id="salary-chart" class="columns"></div><details class="chart-method"><summary>薪资统计口径</summary><p class="chart-foot">以薪资区间中点分组；年薪 ÷ 12。面议、缺失和无效值不计入，不跨币种换算。</p></details></article>
+      <article class="panel"><div class="panel-head"><div><h2>学历要求</h2></div><span class="subtle">规范结论 · 待核验单列</span></div><div id="education-chart" class="bars"></div><p id="education-coverage" class="requirements-summary"></p><details class="chart-method"><summary>学历统计口径</summary><p class="chart-foot">包含来源字段与已核验结论。优先、等价经验等条件保留在岗位详情，未知和不限分别统计。</p></details></article>
+      <article class="panel"><div class="panel-head"><div><h2>经验要求</h2></div><span class="subtle">规范结论 · 待核验单列</span></div><div id="experience-chart" class="bars"></div><p id="experience-coverage" class="requirements-summary"></p><details class="chart-method"><summary>经验统计口径</summary><p class="chart-foot">未确认的提取结果不计入具体年限；未知、明确不限与待核验分别保留。</p></details></article>
+    </div>
+    <details class="method-note"><summary>数据来源与统计口径</summary><p id="source-method">来源以当前筛选结果为准，不代表整个招聘市场。</p><p>所有图表使用同一组筛选。记录按来源与原始岗位 ID 保存，重复判断保留原记录。同一岗位可关联多地，地区总数可能大于岗位数；单次采集只能反映当时的公开信息。</p></details>
+  </section>
+  <section id="explore" class="view" hidden>
+    <article class="panel"><div class="panel-head"><div><h2>岗位明细 <span id="job-count" class="count"></span></h2></div><button id="export" class="secondary"> 导出当前结果</button></div>
+    <div class="table-scroll"><table><thead><tr><th>岗位 / 公司</th><th>地区</th><th>薪资说明</th><th>技能</th><th>来源</th><th>详情</th></tr></thead><tbody id="jobs"></tbody></table></div><div class="pagination"><button id="prev" class="secondary">上一页</button><span id="page-status"></span><button id="next" class="secondary">下一页</button></div></article>
+  </section>
+  <section id="management" class="view" hidden>
+    <div class="scope-bar management-filters" aria-label="岗位管理筛选">
+      <label>数据范围<select id="management-dataset"><option value="real" selected>真实 / 自有数据</option><option value="demo">课程模拟数据</option></select></label>
+      <label class="search-label">搜索岗位<input id="management-q" type="search" placeholder="岗位名称、公司或描述…"></label>
+      <label>岗位状态<select id="management-status"><option value="all">全部状态</option><option value="active">启用</option><option value="inactive">停用</option></select></label>
+      <button id="management-reset" class="quiet" type="button">清空筛选</button>
+    </div>
+    <p class="scope-note">下架后退出公开展示，记录可恢复。来源已经失效的岗位，恢复后仍保持停用。</p>
+    <article class="panel"><div class="panel-head"><h2>全部岗位 <span id="management-count" class="count"></span></h2><button id="refresh-management" class="secondary" type="button">刷新岗位</button></div>
+      <div class="table-scroll"><table class="management-table"><thead><tr><th>岗位 / 公司</th><th>地区</th><th>来源 / 数据类型</th><th>状态</th><th>下架原因 / 状态时间</th><th>操作</th></tr></thead><tbody id="management-rows"></tbody></table></div>
+      <div class="pagination"><button id="management-prev" class="secondary" type="button">上一页</button><span id="management-page-status"></span><button id="management-next" class="secondary" type="button">下一页</button></div>
+    </article>
+  </section>
+  <section id="import" class="view" hidden>
+    <div class="import-grid">
+    <article class="panel"><h2>已授权来源快照</h2><p class="body-text">本发行版不附第三方招聘原文。自行准备有权使用的来源快照后，可按来源与原始岗位 ID 更新；记录保留来源与采集信息。</p><p id="import-ownership" class="body-text"></p><div class="card-actions"><button id="load-public-sample" class="primary" type="button" hidden>载入已授权来源快照</button></div><p class="chart-foot">本地演示请使用课程模拟数据。来源接入方式见项目 docs/DATA_SOURCES.md。</p><details class="method-note"><summary>更新方式与数据边界</summary><div class="source-facts"><p><b>在线更新</b><span>“更新 Cloudflare 岗位”仅读取该公司的技术岗位来源；其他来源由采集脚本更新后重新载入。</span></p><p><b>样本边界</b><span>不同来源提供的字段不同，缺失信息保留为未知。</span></p><p><b>重复处理</b><span>同来源、同岗位 ID 更新；人工下架状态保留。</span></p></div><a href="https://docs.greenhouse.io/job-board.html" target="_blank" rel="noreferrer">公开接口文档</a></details><div class="card-actions"><button id="load-demo" class="secondary" type="button">载入课程模拟数据</button></div><p class="chart-foot">模拟数据用于功能测试，载入后切换到模拟范围。</p></article>
+    <article class="panel"><h2>导入 CSV 文件</h2><p class="body-text">选择 CSV 或粘贴内容，最多 2 MB / 5000 行。同来源、同岗位 ID 会更新已有记录。</p><a href="/api/template" download> 下载字段模板</a><form id="import-form"><label>数据源名称<input id="import-source" required maxlength="60" placeholder="例如：小组采集2026"></label><label>选择 CSV 文件<input type="file" id="csv-file" accept=".csv,text/csv"></label><label>CSV 内容<textarea id="csv-content" rows="7" placeholder="job_id,title,company,location,…" required></textarea></label><label class="check"><input type="checkbox" id="is-demo" checked>这是模拟 / 测试数据</label><button id="import-submit" class="primary" type="submit">校验并导入</button></form><p class="chart-foot">真实数据需有可说明的来源。错误行会被隔离，并在更新记录中显示原因。</p></article>
+    </div>
+  </section>
+  <section id="provenance" class="view" hidden><article class="panel"><div class="panel-head"><div><h2>数据更新批次</h2></div><button id="refresh-runs" class="secondary">刷新记录</button></div><p class="body-text">最近 50 个批次。展开记录可查看无效行和处理原因。</p><div id="runs"></div><h2 class="spaced">关键操作记录</h2><div id="audit-events"></div></article></section>
+  <section id="quality" class="view" hidden>
+    <div id="quality-metrics" class="metrics"></div>
+    <article class="panel"><div class="panel-head"><h2>质量问题分布</h2><button id="refresh-quality" class="secondary">重新检查</button></div><div id="quality-chart" class="bars"></div><p class="chart-foot">按当前数据范围和筛选计算。一条岗位可有多个问题，问题数量之和可能大于岗位数。可选字段缺失不删除岗位；疑似重复不自动合并。</p></article>
+    <article class="panel spaced"><h2>字段核验</h2><p id="quality-count" class="body-text"></p><p class="body-text">打开岗位详情，对照原文确认学历与经验。管理员可核验公开来源；企业维护者可核验本企业岗位。提取建议需确认后才计入具体分类。</p><div class="table-scroll"><table><thead><tr><th>岗位 / 公司</th><th>问题说明</th><th>来源</th><th>操作</th></tr></thead><tbody id="quality-rows"></tbody></table></div></article>
+    <article class="panel spaced"><h2>疑似重复判断</h2><p id="duplicate-count" class="body-text"></p><p class="body-text">相同公司、标题与地区的不同记录会进入候选，包括同来源的不同 ID。对照原文判断是否为同一招聘岗位；判断可撤销，来源记录始终保留，“同一岗位”不代表相同招聘人数。</p><div id="duplicate-pairs"></div><div class="pagination"><button id="duplicate-prev" class="secondary" type="button">上一页候选</button><span id="duplicate-page-status"></span><button id="duplicate-next" class="secondary" type="button">下一页候选</button></div></article>
+  </section>
+  <section id="company" class="view" hidden>
+    <article class="panel"><div class="panel-head"><div><h2>本企业岗位</h2></div><button id="new-company-job" class="primary">新增岗位</button></div><p class="body-text">草稿仅本企业可见，发布且启用后求职者可查看。下架保留记录，可随时恢复。</p><div class="table-scroll"><table><thead><tr><th>岗位</th><th>地区</th><th>状态</th><th>数据类型</th><th>操作</th></tr></thead><tbody id="company-rows"></tbody></table></div></article>
+    <article class="panel spaced" id="company-editor" hidden><div class="panel-head"><h2 id="company-editor-title">岗位编辑</h2><button id="cancel-company-edit" type="button" class="quiet">收起编辑</button></div><p class="body-text">填写岗位信息，保存为草稿或发布给求职者。</p><div id="company-edit-notice" class="notice" role="status" aria-live="polite" hidden></div><form id="company-form">
+      <input type="hidden" id="company-job-id">
+      <fieldset class="form-section"><legend>基本信息</legend><div class="form-grid"><label>岗位名称<input id="company-title" required maxlength="500"></label><label>工作地区<input id="company-location" required maxlength="500"></label><label>学历要求<input id="company-education" placeholder="留空表示未披露"></label><label>经验要求<input id="company-experience" placeholder="留空表示未披露"></label></div></fieldset>
+      <fieldset class="form-section"><legend>薪资信息</legend><div class="form-grid"><label>薪资说明<input id="company-salary-text" placeholder="例如：15–25K/月或面议"></label><label>币种<select id="company-currency"><option value="CNY">CNY</option><option value="USD">USD</option></select></label><label>薪资下限<input id="company-salary-min" type="number" min="1" step="0.01"></label><label>薪资上限<input id="company-salary-max" type="number" min="1" step="0.01"></label><label>计薪周期<select id="company-period"><option value="month">月薪</option><option value="year">年薪</option></select></label><label>来源链接<input id="company-url" type="url" placeholder="可选"></label></div></fieldset>
+      <label>岗位描述<textarea id="company-description" rows="6" maxlength="100000" required></textarea></label>
+      <fieldset class="form-section"><legend>可见范围与状态</legend><div class="form-flags"><label class="check"><input type="checkbox" id="company-demo" checked>模拟 / 测试岗位</label><label class="check"><input type="checkbox" id="company-published">发布给普通端</label><label class="check"><input type="checkbox" id="company-active" checked>启用岗位</label></div><p class="review-help">发布且启用的岗位对普通端可见；模拟岗位保留模拟标记。</p></fieldset>
+      <button id="company-submit" class="primary" type="submit">保存岗位</button>
+    </form></article>
+  </section>
+  <section id="team" class="view" hidden>
+    <article class="panel"><h2>本企业 HR 授权</h2><p class="body-text">授予维护权后，HR 可编辑、导入和发布本企业岗位。撤回权限立即生效。</p><div id="team-members"></div></article>
+    <article class="panel spaced"><h2>添加 HR 账号</h2><form id="team-form"><div class="form-grid"><label>账号<input id="team-username" required minlength="3" maxlength="40" autocomplete="off"></label><label>显示名称<input id="team-name" required maxlength="60"></label><label>初始密码<input id="team-password" type="password" required minlength="10" maxlength="128" autocomplete="new-password"></label></div><label class="check"><input id="team-manage" type="checkbox">授予岗位维护权限</label><button id="team-submit" class="primary">创建 HR 账号</button></form></article>
+  </section>
+  <section id="favorites" class="view" hidden><div id="favorite-cards" class="favorite-grid"></div></section>
+  <section id="resume" class="view" hidden>
+    <article class="panel resume-panel">
+      <div class="panel-head"><h2>简历文件</h2><button id="resume-refresh" class="secondary" type="button">刷新简历</button></div>
+      <p class="body-text">每个账号保留一份简历，仅本人可下载查看。新文件上传成功后替换原文件；上传失败时保留原文件。</p>
+      <div id="resume-notice" class="notice" role="status" aria-live="polite" hidden></div>
+      <p id="resume-empty" class="body-text">尚未读取简历信息。</p>
+      <div id="resume-current" hidden>
+        <dl class="resume-metadata">
+          <div class="resume-filename"><dt>文件名</dt><dd id="resume-filename"></dd></div>
+          <div><dt>类型</dt><dd id="resume-type"></dd></div>
+          <div><dt>大小</dt><dd id="resume-size"></dd></div>
+          <div><dt>更新时间</dt><dd id="resume-updated"></dd></div>
+        </dl>
+        <a id="resume-download" class="secondary resume-download" href="/api/resume/download" download>下载查看</a>
+      </div>
+      <form id="resume-form">
+        <label>选择简历<input id="resume-file" type="file" required accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" aria-describedby="resume-file-help"></label>
+        <p id="resume-file-help" class="chart-foot">支持 PDF、DOCX，文件不超过 2 MiB（2,097,152 字节）。选择后点击上传；查看时下载原文件。</p>
+        <p id="resume-selection" class="body-text" aria-live="polite">尚未选择文件。</p>
+        <button id="resume-submit" class="primary" type="submit">上传简历</button>
+      </form>
+    </article>
+  </section>
+  <footer><span>recruitment-insights · v2.5 · 界面字体 MiSans</span><span id="last-update">等待数据</span><span>招聘信息实时数据分析系统 · 课程验收版</span></footer>
+  </div>
+</main>
+<dialog id="detail" aria-label="岗位详情"><div class="dialog-head"><span id="detail-heading">岗位详情</span><button id="close-detail">关闭</button></div><div id="detail-content"></div></dialog>
+<dialog id="lifecycle-dialog" aria-labelledby="lifecycle-heading">
+  <div class="dialog-head"><span id="lifecycle-heading">岗位下架</span><button id="close-lifecycle" type="button">关闭</button></div>
+  <div class="lifecycle-content"><h2 id="lifecycle-title"></h2><p id="lifecycle-context" class="body-text"></p><p id="lifecycle-explanation" class="body-text"></p>
+    <div id="lifecycle-notice" class="notice" role="status" aria-live="polite" hidden></div>
+    <form id="lifecycle-form"><label id="lifecycle-reason-label">下架原因<textarea id="lifecycle-reason" rows="4" minlength="1" maxlength="500" required placeholder="填写下架原因，例如：岗位已招满或信息需要修正"></textarea></label><p id="lifecycle-help" class="review-help">原因与操作记录会保存，之后可恢复岗位。</p><div class="card-actions"><button id="lifecycle-submit" class="primary" type="submit">确认下架</button><button id="cancel-lifecycle" class="secondary" type="button">取消</button></div></form>
+  </div>
+</dialog>
+</body></html>

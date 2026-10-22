@@ -1,0 +1,2 @@
+# Resume PDF structure validation; includes upstream parser security fixes.
+pypdf==6.21.2

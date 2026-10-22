@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>recruitment-insights · 登录</title><link rel="stylesheet" href="/style.css"><script src="/login.js" defer></script></head>
+<body class="login-page">
+<main class="login-layout">
+  <section class="login-intro">
+    <a class="brand" href="/"><span>recruitment-insights<small>招聘数据工作台</small></span></a>
+    <h1>看清岗位，<span>管理招聘。</span></h1>
+    <p>在一个工作空间里探索岗位、管理招聘，让每一条信息都有依据。</p>
+    <div class="portal-cards">
+      <article><h2>企业端</h2><p>负责人 / HR · 维护岗位与团队权限</p></article>
+      <article><h2>普通端</h2><p>求职者 · 搜索、收藏与个人备注</p></article>
+    </div>
+    <p class="login-foot">课程设计 · v2.5 · 真实与模拟数据分别展示 · 界面字体 MiSans</p>
+  </section>
+  <section class="login-card" aria-labelledby="login-title">
+    <h2 id="login-title">登录工作空间</h2>
+    <p id="login-description" class="body-text">登录后进入你的工作空间。</p>
+    <div id="login-notice" class="notice" role="status" aria-live="polite" hidden></div>
+    <form id="login-form">
+      <label>账号<input id="username" autocomplete="username" required maxlength="40" placeholder="请输入账号"></label>
+      <label>密码<input id="password" type="password" autocomplete="current-password" required maxlength="128" placeholder="请输入密码"></label>
+      <button id="login-submit" class="primary" type="submit">登录</button>
+    </form>
+    <form id="register-form" hidden>
+      <p class="chart-foot">仅创建普通求职者账号。企业账号需由负责人或管理员授权创建。</p>
+      <label>显示名称<input id="register-name" required maxlength="60" placeholder="填写用于显示的名称"></label>
+      <label>账号<input id="register-username" required minlength="3" maxlength="40" pattern="[A-Za-z0-9_\-]{3,40}" autocomplete="username" aria-describedby="register-username-help" placeholder="3–40 位账号名称"><small id="register-username-help">可用英文字母、数字、下划线（_）或横线（-）。</small></label>
+      <label>密码<input id="register-password" type="password" required minlength="10" maxlength="128" autocomplete="new-password" aria-describedby="register-password-help" placeholder="10–128 个字符"><small id="register-password-help">密码长度须为 10–128 个字符。</small></label>
+      <label>确认密码<input id="register-password-confirm" type="password" required minlength="10" maxlength="128" autocomplete="new-password" placeholder="再次输入密码"></label>
+      <button id="register-submit" class="primary" type="submit">注册普通端账号</button>
+    </form>
+    <button id="switch-auth" class="quiet" type="button">没有账号？注册普通端</button>
+    <details class="demo-accounts">
+      <summary>查看课程演示账号</summary>
+      <p>统一演示密码：<code>JobLens-Demo-2026!</code></p>
+      <div class="demo-account-list">
+        <span>企业负责人 A<code>boss_a</code></span><span>企业负责人 B<code>boss_b</code></span>
+        <span>HR A<code>hr_a</code></span><span>HR B<code>hr_b</code></span>
+        <span>求职者 A<code>candidate_a</code></span><span>求职者 B<code>candidate_b</code></span>
+        <span>数据管理员<code>admin</code></span>
+      </div>
+      <p>仅用于本机课程验收。企业账号由负责人或管理员创建。</p>
+    </details>
+  </section>
+</main>
+</body>
+</html>
