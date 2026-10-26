@@ -6,9 +6,10 @@ from pathlib import Path, PurePosixPath
 ROOT = Path(__file__).resolve().parents[1]
 ARCHIVE = ROOT/'outputs/recruitment-insights-source.zip'
 SOFTWARE_FILES = ('LICENSE', 'THIRD_PARTY_NOTICES.md', 'README.md', 'requirements.txt',
-                  'app.py', 'core.py', 'accounts.py', 'seed_demo_accounts.py',
+                  'app.py', 'core.py', 'accounts.py', 'seed_demo_accounts.py', 'scripts/seed_showcase.py',
                   'data/demo_jobs.csv', 'data/demo_update.csv', 'data/import_template.csv',
                   'static/app.js', 'static/index.html', 'static/login.html', 'static/login.js', 'static/style.css',
+                  'static/onboarding.html', 'static/onboarding.js', 'static/onboarding.css',
                   'static/fonts/README.md', 'static/fonts/MiSans-font-license.pdf',
                   'static/fonts/MiSans-Regular.woff2', 'static/fonts/MiSans-Medium.woff2', 'static/fonts/MiSans-Semibold.woff2') + tuple(
                   sorted(p.relative_to(ROOT).as_posix() for p in (ROOT/'recruitment_insights').rglob('*.py')))

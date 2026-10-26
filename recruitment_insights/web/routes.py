@@ -13,6 +13,8 @@ LOG = logging.getLogger('recruitment')
 STATIC = {name: (name.lstrip('/'), mime) for name, mime in (
     ('/app.js', 'application/javascript; charset=utf-8'),
     ('/login.js', 'application/javascript; charset=utf-8'),
+    ('/onboarding.js', 'application/javascript; charset=utf-8'),
+    ('/onboarding.css', 'text/css; charset=utf-8'),
     ('/style.css', 'text/css; charset=utf-8'))}
 FONT_FILES = {f'/fonts/MiSans-{weight}.woff2': f'MiSans-{weight}.woff2'
               for weight in ('Regular', 'Medium', 'Semibold')}
@@ -52,6 +54,9 @@ class Routes:
 
     def login_page(self):
         page = (ROOT/'static/login.html').read_text(encoding='utf-8')
+        if self.policy.registration_enabled:
+            page = page.replace('<!-- enterprise-registration-entry -->',
+                '<a id="enterprise-register" class="quiet" href="/join">企业入驻：申请工作账号</a>')
         if not self.policy.registration_enabled:
             page = page.replace('<body class="login-page">', '<body class="login-page" data-registration="disabled">')
             page = page.replace('<button id="switch-auth" class="quiet" type="button">',
@@ -59,7 +64,7 @@ class Routes:
         if self.policy.invited:
             start = page.index('    <details class="demo-accounts">')
             end = page.index('</details>', start) + len('</details>')
-            guidance = ('可注册普通端账号；企业与管理账号由授权人员创建。'
+            guidance = ('可注册普通端账号；企业账号申请入驻后由管理员审核开通。'
                         if self.policy.registration_enabled else '请使用收到的邀请账号登录。')
             page = page[:start] + '    <p>' + guidance + '</p>' + page[end:]
         return page.encode('utf-8')
@@ -77,21 +82,41 @@ class Routes:
         if path == '/api/health':
             return Response(200, dict(status='ok', version=VERSION, service=PROJECT_NAME, instance_id=INSTANCE_ID))
         actor = accounts.user(token)
+        if path in ('/join', '/enterprise-review'):
+            if path == '/enterprise-review':
+                if not actor:
+                    return Response(303, b'', headers={'Location': '/login'})
+                require_role(actor, 'admin')
+            elif not actor and not self.policy.registration_enabled:
+                return Response(403, {'error': '本实例暂未开放注册'})
+            return Response(200, (ROOT/'static/onboarding.html').read_bytes(), 'text/html; charset=utf-8')
         if path in ('/', '/login', '/enterprise', '/public'):
             if path == '/login' or (not actor and path == '/'):
                 return Response(200, self.login_page(), 'text/html; charset=utf-8')
             if not actor:
                 return Response(303, b'', headers={'Location': '/login'})
             destination = '/public' if actor['role'] == 'candidate' else '/enterprise'
+            application = store.onboarding.mine(actor) if actor['role'] == 'candidate' else None
+            if application:
+                return Response(303, b'', headers={'Location': '/join'})
             if path != destination:
                 return Response(303, b'', headers={'Location': destination})
-            return Response(200, (ROOT/'static/index.html').read_bytes(), 'text/html; charset=utf-8')
+            page = (ROOT/'static/index.html').read_text(encoding='utf-8').replace('<!-- enterprise-review-entry -->',
+                '<a class="nav" href="/enterprise-review" data-roles="admin" hidden>企业入驻审核</a>')
+            return Response(200, page.encode('utf-8'), 'text/html; charset=utf-8')
         if not path.startswith('/api/'):
             return Response(404, {'error': '页面或接口不存在'})
         if not actor:
             return Response(401, {'error': '请先登录'})
         if path == '/api/auth/me':
             return Response(200, actor)
+        if path == '/api/enterprise-application':
+            return Response(200, store.onboarding.mine(actor))
+        if path == '/api/admin/enterprise-applications':
+            params = parse_qs(query)
+            return Response(200, store.onboarding.queue(actor, int(params.get('page', ['1'])[0])))
+        if path.startswith('/api/admin/enterprise-applications/'):
+            return Response(200, store.onboarding.detail(actor, int(path.rsplit('/', 1)[1])))
         if path == '/api/resume':
             require_role(actor, 'candidate')
             return Response(200, store.resumes.info(actor))
@@ -155,7 +180,7 @@ class Routes:
 
     def post(self, path, body, token):
         store, accounts = self.store, self.accounts
-        if path == '/api/auth/register':
+        if path in ('/api/auth/register', '/api/auth/register-enterprise'):
             if not self.policy.registration_enabled:
                 return Response(403, {'error': '本工作空间仅接受邀请账号'})
             if self.registration_throttle is not None:
@@ -165,6 +190,11 @@ class Routes:
                                     headers={'Retry-After': str(retry_after)})
             if self.policy.invited and body.get('password') == DEMO_PASSWORD:
                 raise ValueError('普通端账号不能使用公开演示密码')
+            if path == '/api/auth/register-enterprise':
+                if accounts.user(token):
+                    raise ValueError('请先退出当前账号，再使用独立企业工作账号申请')
+                store.onboarding.register(body)
+                return Response(201, {'message': '企业申请已提交，请登录查看审核状态'})
             accounts.create_user(body.get('username'), body.get('password'), body.get('display_name'), role='candidate')
             return Response(201, {'message': '普通端账号已创建，请登录'})
         if path == '/api/auth/login':
@@ -196,6 +226,10 @@ class Routes:
         actor = accounts.user(token)
         if not actor:
             return Response(401, {'error': '请先登录'})
+        if path == '/api/enterprise-application':
+            return Response(200, store.onboarding.change(actor, body))
+        if path == '/api/admin/enterprise-applications/review':
+            return Response(200, store.onboarding.review(actor, body))
         if path == '/api/auth/logout':
             accounts.logout(token)
             return Response(200, {'message': '已退出'}, headers={

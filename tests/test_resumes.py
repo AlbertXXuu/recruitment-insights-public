@@ -341,7 +341,7 @@ class ResumeMigrationTests(unittest.TestCase):
             for _ in range(2):
                 with migrated.connect() as database:
                     self.assertEqual([row[0] for row in database.execute(
-                        'SELECT version FROM schema_migrations ORDER BY version')], [1, 2, 3])
+                        'SELECT version FROM schema_migrations ORDER BY version')], [1, 2, 3, 4])
                     self.assertEqual(database.execute('SELECT COUNT(*) FROM resumes').fetchone()[0], 0)
                     self.assertEqual({name: [tuple(row) for row in database.execute('SELECT * FROM ' + name)]
                                       for name in old_tables}, before)

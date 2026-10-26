@@ -5,6 +5,7 @@
 ## 功能
 
 - 求职者注册、登录、独立身份显示；岗位检索、图表筛选、导出、收藏和私人备注。
+- 企业工作账号申请入驻、管理员驳回/审批、申请人修改重提；审批后成为企业负责人。
 - 企业负责人创建/编辑/发布/下架岗位，管理本企业 HR 维护权；可维护与只读 HR 的写入权限实时生效。
 - 企业、个人和公开数据隔离；管理员 CSV 导入、来源更新、质量检查、学历/经验核验与疑似重复处理。
 - 求职者本人 PDF/DOCX 简历上传、替换、原件下载与持久保存；上限 2 MiB，仅本人可访问。
@@ -19,8 +20,7 @@ Windows PowerShell：
 ```powershell
 py -3 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-.\.venv\Scripts\python.exe scripts/seed_db.py --demo-only --db outputs/local-demo/demo.sqlite3
-.\.venv\Scripts\python.exe seed_demo_accounts.py --db outputs/local-demo/demo.sqlite3
+.\.venv\Scripts\python.exe scripts/seed_showcase.py --db outputs/local-demo/demo.sqlite3
 .\.venv\Scripts\python.exe app.py --db outputs/local-demo/demo.sqlite3 --port 8765
 ```
 
@@ -29,12 +29,11 @@ macOS / Linux：
 ```sh
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python scripts/seed_db.py --demo-only --db outputs/local-demo/demo.sqlite3
-.venv/bin/python seed_demo_accounts.py --db outputs/local-demo/demo.sqlite3
+.venv/bin/python scripts/seed_showcase.py --db outputs/local-demo/demo.sqlite3
 .venv/bin/python app.py --db outputs/local-demo/demo.sqlite3 --port 8765
 ```
 
-打开 <http://127.0.0.1:8765/login>。初始化导入 **180 条明确标注的合成岗位**；登录后选择“模拟 / 测试数据”查看。“真实 / 自有数据”初始为空。按 Ctrl+C 停止前台服务；若端口被占用，改用其他端口。
+打开 <http://127.0.0.1:8765/login>。初始化导入 **180 条合成公共岗位**，并为两家演示企业各准备 **1 条已发布岗位、1 条草稿**，合计 184 条；求职者可见其中 182 条。登录后选择“课程模拟数据”查看。“真实 / 自有数据”初始为空。按 Ctrl+C 停止前台服务；若端口被占用，改用其他端口。
 
 账号由上面的显式脚本准备，不在服务启动时自动创建。以下演示账号共用公开密码 `JobLens-Demo-2026!`，仅供独立本地演示：
 
@@ -43,9 +42,12 @@ python3 -m venv .venv
 | `admin` | 数据管理员 |
 | `boss_a` / `boss_b` | 两个不同企业的负责人 |
 | `hr_a` / `hr_b` | 两企业 HR，维护权由负责人控制 |
+| `hr_readonly_a` | 企业 A 的只读 HR，可与 `hr_a` 对照 |
 | `candidate_a` / `candidate_b` | 两个独立求职者 |
 
-重复初始化保留已有账号和密码。需要体验注册时，可在登录页创建新的普通求职者；不能自行选择企业或管理员身份。企业岗位默认草稿，负责人发布后求职者才能查看；本地演示应保留“模拟 / 测试岗位”标记。
+以上共 8 个演示账号。重复初始化保留已有账号、密码、授权和岗位编辑；已有岗位的企业不再补建样例。基础的 `seed_db.py --demo-only` 与 `seed_demo_accounts.py` 仍可分别使用。
+
+需要体验个人注册时，在登录页创建普通求职者；服务端固定最低权限。企业申请通过 `/join` 创建独立工作账号，管理员在 `/enterprise-review` 审核；通过后申请账号成为负责人，再由负责人创建和授权 HR。申请人不能自行选择企业或管理员权限。仅演示已有角色时使用上表账号即可。流程和限制见 [企业入驻](docs/ENTERPRISE_ONBOARDING.md)。企业岗位默认草稿，负责人发布后求职者才能查看；本地演示应保留“模拟 / 测试岗位”标记。
 
 ## 验证与工具
 
@@ -53,7 +55,7 @@ python3 -m venv .venv
 
 ```sh
 python -m unittest discover -s tests
-node --test tests/test_frontend.cjs tests/test_login.cjs tests/test_resume_frontend.cjs
+node --test tests/test_frontend.cjs tests/test_login.cjs tests/test_resume_frontend.cjs tests/test_onboarding_frontend.cjs
 ```
 
 Node.js 仅用于前端测试。3 项旧版 2.2 实现对照测试需要未随此版本分发的私有历史 checkpoint，缺失时明确跳过；当前迁移、事务和权限测试仍执行。macOS/Linux 命令与标准库入口兼容，但本次发行准备只在 Windows 实跑。

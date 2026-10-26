@@ -38,7 +38,7 @@ function resumePage({role = 'candidate', deferredRead = false} = {}) {
   const context = vm.createContext({
     document: {
       getElementById: element, querySelector: element,
-      querySelectorAll: selector => selector === '.nav' ? navigation : selector === '.view' ? views
+      querySelectorAll: selector => ['.nav','.nav[data-view]'].includes(selector) ? navigation : selector === '.view' ? views
         : selector === '[data-roles]' ? [element('nav-resume')] : [],
     },
     URLSearchParams, setInterval() {}, setTimeout, clearTimeout, console, window: {},

@@ -7,8 +7,9 @@ from .accounts import AccountRepository, AuditRepository
 from .jobs import JobRepository, RunRepository
 from .reviews import ReviewRepository
 from .resumes import ResumeRepository
+from .onboarding import OnboardingRepository
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 BASE_SCHEMA = '''
 CREATE TABLE IF NOT EXISTS organizations(id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE);
 CREATE TABLE IF NOT EXISTS runs(id INTEGER PRIMARY KEY, started_at TEXT NOT NULL, source TEXT NOT NULL,
@@ -57,6 +58,9 @@ REQUIRED_COLUMNS = {
     'field_reviews': {'job_id','field','conclusion','source_hash','state','version','user_id','reviewed_at'},
     'duplicate_decisions': {'left_id','right_id','decision','reason','left_hash','right_hash','version','user_id','reviewed_at'},
     'resumes': {'user_id','filename','media_type','size_bytes','content','sha256','uploaded_at'},
+    'enterprise_applications': {'id','applicant_id','company_name','name_key','contact_name','contact','website',
+        'description','status','version','org_id','reviewer_id','review_reason','created_at','updated_at'},
+    'enterprise_application_events': {'id','application_id','actor_id','created_at','snapshot'},
 }
 
 
@@ -105,7 +109,23 @@ def migrate_v3(db):
         uploaded_at TEXT NOT NULL)''')
 
 
-MIGRATIONS = {1: migrate_v1, 2: migrate_v2, 3: migrate_v3}
+def migrate_v4(db):
+    db.execute('''CREATE TABLE IF NOT EXISTS enterprise_applications(
+        id INTEGER PRIMARY KEY, applicant_id INTEGER NOT NULL UNIQUE REFERENCES users(id),
+        company_name TEXT NOT NULL, name_key TEXT NOT NULL, contact_name TEXT NOT NULL,
+        contact TEXT NOT NULL, website TEXT NOT NULL, description TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('pending','approved','rejected','withdrawn')),
+        version INTEGER NOT NULL CHECK(version>0), org_id INTEGER REFERENCES organizations(id),
+        reviewer_id INTEGER REFERENCES users(id), review_reason TEXT NOT NULL DEFAULT '',
+        created_at REAL NOT NULL, updated_at REAL NOT NULL)''')
+    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS enterprise_active_name ON enterprise_applications(name_key) WHERE status IN ('pending','approved')")
+    db.execute('''CREATE TABLE IF NOT EXISTS enterprise_application_events(
+        id INTEGER PRIMARY KEY, application_id INTEGER NOT NULL REFERENCES enterprise_applications(id),
+        actor_id INTEGER NOT NULL REFERENCES users(id), created_at REAL NOT NULL, snapshot TEXT NOT NULL)''')
+    db.execute('CREATE INDEX IF NOT EXISTS enterprise_history ON enterprise_application_events(application_id,id)')
+
+
+MIGRATIONS = {1: migrate_v1, 2: migrate_v2, 3: migrate_v3, 4: migrate_v4}
 
 
 class Connection(sqlite3.Connection):
@@ -124,6 +144,7 @@ class Transaction:
         self.reviews = ReviewRepository(connection)
         self.audit = AuditRepository(connection)
         self.resumes = ResumeRepository(connection)
+        self.onboarding = OnboardingRepository(connection)
 
 
 class Database:

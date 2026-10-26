@@ -186,10 +186,12 @@ class UnitOfWorkMigrationTests(unittest.TestCase):
         """Project only added columns away; compare every original row and object."""
         objects, old_rows = before
         actual_objects, actual_rows = snapshot(self.path)
-        self.assertEqual([item for item in actual_objects if item[1] != 'jobs' and item[2] != 'resumes'],
+        added_tables = {'resumes', 'enterprise_applications', 'enterprise_application_events'}
+        self.assertEqual([item for item in actual_objects if item[1] != 'jobs' and item[2] not in added_tables],
                          [item for item in objects if item[1] != 'jobs'])
-        self.assertEqual(set(actual_rows), set(old_rows) | {'resumes'})
-        self.assertEqual(actual_rows['resumes'], [], 'A legacy migration must not invent resume data')
+        self.assertEqual(set(actual_rows), set(old_rows) | added_tables)
+        for table in added_tables:
+            self.assertEqual(actual_rows[table], [], 'A legacy migration must not invent new business data')
         for table in old_rows:
             if table != 'jobs':
                 self.assertEqual(actual_rows[table], old_rows[table], table)

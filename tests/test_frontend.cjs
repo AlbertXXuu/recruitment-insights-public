@@ -91,7 +91,7 @@ test('finishing the initial load preserves a candidate navigation to favorites',
   const context = vm.createContext({
     document: {
       getElementById: element, querySelector: element,
-      querySelectorAll: selector => selector === '.nav' ? navigation : selector === '.view' ? views : [],
+      querySelectorAll: selector => ['.nav','.nav[data-view]'].includes(selector) ? navigation : selector === '.view' ? views : [],
     },
     URLSearchParams, setInterval() {}, setTimeout, clearTimeout, console, window: {},
   });
@@ -148,6 +148,38 @@ function lifecycleHarness() {
   vm.runInContext('api=(...args)=>request(...args); renderStats=()=>{}; renderJobs=()=>{};', context);
   return {element, context};
 }
+
+test('failed HR creation clears the initial password and preserves non-secret retry fields', async () => {
+  const {element, context}=lifecycleHarness();
+  element('team-username').value='fixture_hr';
+  element('team-name').value='独立测试 HR';
+  element('team-password').value='Fixture-only-123!';
+  element('team-manage').checked=false;
+  const requests=[];
+  context.request=async(path,body)=>{requests.push({path,body});throw new Error('账号名称已存在');};
+  element('team-form').listeners.submit({preventDefault(){}});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(requests.length,1);
+  assert.equal(requests[0].path,'/api/team');
+  assert.equal(requests[0].body.can_manage,false);
+  assert.equal(element('team-password').value,'');
+  assert.equal(element('team-username').value,'fixture_hr');
+  assert.equal(element('team-name').value,'独立测试 HR');
+  assert.equal(element('team-submit').disabled,false);
+  assert.match(element('notice').textContent,/账号名称已存在/);
+});
+
+test('read-only HR receives an explanation of disabled maintenance and import actions', () => {
+  const {element,context}=lifecycleHarness();
+  vm.runInContext("configureUser({role:'hr',org_id:1,org_name:'测试企业',display_name:'HR',can_manage_jobs:false})",context);
+  assert.equal(element('new-company-job').hidden,true);
+  assert.match(element('import-ownership').textContent,/只读.*不能导入.*负责人授权/);
+  assert.match(vm.runInContext('names.company[2]',context),/只读.*负责人授权/);
+  vm.runInContext("configureUser({role:'hr',org_id:1,org_name:'测试企业',display_name:'HR',can_manage_jobs:true})",context);
+  assert.equal(element('new-company-job').hidden,false);
+  assert.doesNotMatch(element('import-ownership').textContent,/只读/);
+  assert.doesNotMatch(vm.runInContext('names.company[2]',context),/只读/);
+});
 
 test('account display name and static identity remain separate for every role', () => {
   const {element, context} = lifecycleHarness();

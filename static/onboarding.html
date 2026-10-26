@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>企业入驻 · recruitment-insights</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/onboarding.css"><script src="/onboarding.js" defer></script></head>
+<body class="onboarding-page">
+<main class="onboarding-shell">
+  <header class="onboarding-header"><a href="/" class="brand">recruitment-insights</a><a href="/login" id="back-link">返回登录</a></header>
+  <h1 id="heading">申请企业入驻</h1>
+  <p id="intro" class="body-text">使用独立工作账号申请。管理员审核通过后，即可管理企业岗位和 HR。</p>
+  <div id="message" class="notice" role="status" aria-live="polite" hidden></div>
+  <section id="registration" class="panel" hidden>
+    <form id="application-form">
+      <fieldset id="account-fields"><legend>工作账号</legend><div class="onboarding-grid">
+        <label>显示名称<input name="display_name" required maxlength="60" autocomplete="name"></label>
+        <label>账号<input name="username" required minlength="3" maxlength="40" pattern="[A-Za-z0-9_\-]{3,40}" autocomplete="username"><small>3–40 位英文字母、数字、下划线或横线。</small></label>
+        <label>密码<input name="password" type="password" required minlength="10" maxlength="128" autocomplete="new-password"></label>
+        <label>再次输入密码<input name="confirmation" type="password" required minlength="10" maxlength="128" autocomplete="new-password"></label>
+      </div></fieldset>
+      <fieldset><legend>企业信息</legend><div class="onboarding-grid">
+        <label>企业名称<input name="company_name" required minlength="2" maxlength="120" autocomplete="organization"></label>
+        <label>联系人<input name="contact_name" required maxlength="60"></label>
+        <label>联系方式<input name="contact" required minlength="3" maxlength="120" placeholder="邮箱或联系电话"><small>仅用于管理员核对申请，当前不发送验证码。</small></label>
+        <label>公开介绍链接（选填）<input name="website" type="url" maxlength="500" placeholder="https://"></label>
+      </div><label>申请说明<textarea name="description" required minlength="10" maxlength="1000" rows="4" placeholder="说明你与企业的关系及测试用途（10–1000 字）。"></textarea></label></fieldset>
+      <label class="onboarding-check"><input name="dedicated_account" type="checkbox" required>我使用独立企业工作账号；通过后用于企业端，不同时作为求职账号。</label>
+      <p class="subtle">课程测试可填写明确标注的模拟企业。审核通过表示允许使用测试系统，不代表真实企业身份认证。加入已有企业请联系企业负责人。</p>
+      <button class="primary" type="submit" id="submit-application">提交申请</button>
+    </form>
+  </section>
+  <section id="application-status" class="panel" hidden><div class="panel-head"><h2>我的申请</h2><button class="secondary" id="refresh-status">刷新状态</button></div><div id="status-content"></div><div class="onboarding-actions"><button class="secondary" id="withdraw" hidden>撤回申请</button><button class="primary" id="edit" hidden>修改并重新提交</button><a class="primary" id="enter-workspace" href="/enterprise" hidden>进入企业工作台</a></div><details><summary>申请与审核记录</summary><div id="history"></div></details></section>
+  <section id="review-panel" hidden><div class="panel-head"><h2>企业申请</h2><button class="secondary" id="refresh-queue">刷新列表</button></div><div id="queue"></div><div class="onboarding-actions"><button class="secondary" id="previous">上一页</button><span id="page-label"></span><button class="secondary" id="next">下一页</button></div></section>
+</main>
+<dialog id="review-dialog" aria-labelledby="review-title"><form id="review-form"><h2 id="review-title">审核企业申请</h2><div id="review-detail"></div><label>审核说明<textarea id="review-reason" maxlength="1000" rows="3" placeholder="驳回时必须填写原因"></textarea></label><p class="subtle">通过将新建企业并授予申请人负责人权限。请先核对企业与申请人的关系。</p><div class="onboarding-actions"><button class="primary" type="submit" name="decision" value="approved">通过申请</button><button class="secondary" type="submit" name="decision" value="rejected">驳回申请</button><button class="quiet" type="button" id="close-review">取消</button></div><div id="review-error" role="status"></div></form></dialog>
+</body></html>

@@ -165,7 +165,7 @@ async function saveReview(field,action){
 async function loadRuns(){const rows=await api('/api/runs');$('runs').innerHTML=rows.length?rows.map(r=>`<div class="run"><div class="run-header"><span>#${r.id} ${escapeHtml(r.label)} <span class="badge ${r.status}">${{success:'成功',partial:'部分成功',failed:'失败',running:'进行中'}[r.status]||r.status}</span></span><small>${date(r.started_at)}</small></div><div class="run-counts">${r.result.error?escapeHtml(r.result.error):`共 ${r.result.total} 行 · 新增 ${r.result.inserted} · 修改 ${r.result.updated} · 未变 ${r.result.unchanged} · 无效 ${r.result.rejected} · 批内重复折叠 ${r.result.duplicated??0} · 冲突退回 ${r.result.conflicts??0}（已计入无效） · 停用 ${r.result.deactivated}`}</div>${r.result.errors?.length?`<details><summary>查看 ${r.result.errors.length} 条无效行及原因</summary><pre>${escapeHtml(JSON.stringify(r.result.errors,null,2))}</pre></details>`:''}</div>`).join(''):'<div class="empty">还没有更新记录</div>';}
 async function action(button, task){button.disabled=true;const original=button.textContent;button.textContent='处理中…';try{await task();}catch(e){notice(e.message,true);}finally{button.disabled=false;button.textContent=original;}}
 function resultText(r){return `新增 ${r.inserted} · 更新 ${r.updated} · 未变 ${r.unchanged} · 退回 ${r.rejected}。详情见“更新记录”。`;}
-document.querySelectorAll('.nav').forEach(button=>button.addEventListener('click',()=>switchView(button.dataset.view)));
+document.querySelectorAll('.nav[data-view]').forEach(button=>button.addEventListener('click',()=>switchView(button.dataset.view)));
 for(const id of ['location','category','education','experience','source'])$(id).addEventListener('change',()=>{state.page=1;state.duplicatePage=1;reload();});
 $('dataset').addEventListener('change',()=>{clear();reload(true);});
 $('scope').addEventListener('change',()=>{clear();reload(true);});
@@ -201,6 +201,8 @@ function configureUser(user){
   state.user=user;
   const canManage=user.role==='admin'||user.role==='boss'||!!user.can_manage_jobs;
   state.canManage=canManage;
+  const readOnlyHR=user.role==='hr'&&!canManage;
+  names.company[2]=readOnlyHR?'当前为只读权限，可查看本企业岗位。如需维护，请联系企业负责人授权。':'管理本企业岗位，保存草稿、发布或停用。';
   for(const item of document.querySelectorAll('[data-roles]'))item.hidden=!item.dataset.roles.split(' ').includes(user.role);
   const roles={admin:'数据管理员',boss:'企业负责人',hr:'HR',candidate:'求职者'};
   const client=user.role==='candidate'?'普通端':user.role==='admin'?'数据管理':'企业端';
@@ -210,7 +212,7 @@ function configureUser(user){
   document.title='recruitment-insights · '+client;
   $('sync').hidden=user.role!=='admin';$('load-demo').hidden=user.role!=='admin';$('load-public-sample').hidden=user.role!=='admin';
   $('scope-label').hidden=!user.org_id;
-  $('import-ownership').textContent=user.org_id?'CSV 导入归属 '+user.org_name+'，公司字段以账号企业为准；新增记录为草稿，请在企业岗位中发布。':'管理员导入作为公开样本，载入模拟数据只供课程验收。';
+  $('import-ownership').textContent=readOnlyHR?'当前为只读权限，不能导入数据。如需维护，请联系企业负责人授权。':user.org_id?'CSV 导入归属 '+user.org_name+'，公司字段以账号企业为准；新增记录为草稿，请在企业岗位中发布。':'管理员导入作为公开样本，载入模拟数据只供课程验收。';
   for(const input of document.querySelectorAll('#import-form input, #import-form textarea, #import-form button'))input.disabled=!canManage;
   $('new-company-job').hidden=!canManage;
 }
@@ -528,7 +530,7 @@ $('company-form').addEventListener('submit',event=>{event.preventDefault();actio
   $('company-editor').hidden=true;notice(`岗位 #${result.id} 已保存，${!result.active?'已停用':result.published?'已发布到普通端':'保留为企业草稿'}。`);await loadCompany();await load(true);
 });});
 $('team-members').addEventListener('click',event=>{const button=event.target.closest('[data-member]');if(button)action(button,async()=>{await api('/api/team',{id:Number(button.dataset.member),can_manage:button.dataset.allow==='true'});notice('授权已更新，对下一次操作立即生效。');await loadTeam();});});
-$('team-form').addEventListener('submit',event=>{event.preventDefault();action($('team-submit'),async()=>{await api('/api/team',{username:$('team-username').value,display_name:$('team-name').value,password:$('team-password').value,can_manage:$('team-manage').checked});$('team-form').reset();notice('HR 账号已创建。');await loadTeam();});});
+$('team-form').addEventListener('submit',event=>{event.preventDefault();action($('team-submit'),async()=>{try{await api('/api/team',{username:$('team-username').value,display_name:$('team-name').value,password:$('team-password').value,can_manage:$('team-manage').checked});$('team-form').reset();notice('HR 账号已创建。');await loadTeam();}finally{$('team-password').value='';}});});
 $('detail-content').addEventListener('click',event=>{const button=event.target.closest('[data-save-favorite]');if(button)action(button,async()=>{await api('/api/favorites',{job_id:Number(button.dataset.saveFavorite)});button.dataset.saved='true';$('detail').close();notice('已收藏，可在“我的收藏”填写个人备注。');if(state.view==='favorites')await loadFavorites();});});
 $('detail-content').addEventListener('submit',event=>{
   const form=event.target.closest('[data-review-field]');if(!form)return;

@@ -15,12 +15,13 @@ class DomainBoundaryTests(unittest.TestCase):
     def test_domain_imports_without_storage_web_or_application(self):
         script = '''
 import sys
+before = set(sys.modules)  # Host TLS/site initialization may already load urllib.request.
 from recruitment_insights.domain import jobs, access, errors, reviews, requirements, quality
 import requirements as old_requirements
 import quality as old_quality
 assert old_requirements is requirements
 assert old_quality is quality
-for name in sys.modules:
+for name in set(sys.modules) - before:
     assert not name.startswith(('recruitment_insights.application', 'recruitment_insights.infrastructure', 'recruitment_insights.web'))
     assert name not in ('core', 'accounts', 'app', 'sqlite3', 'urllib.request', 'http.server')
 assert jobs.analyze([])['total'] == 0

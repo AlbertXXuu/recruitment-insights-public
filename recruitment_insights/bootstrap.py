@@ -5,6 +5,7 @@ from recruitment_insights.application.jobs import JobService
 from recruitment_insights.application.queries import Queries
 from recruitment_insights.application.reviews import ReviewService
 from recruitment_insights.application.resumes import ResumeService
+from recruitment_insights.application.onboarding import Onboarding
 from recruitment_insights.infrastructure.database import Database, Transaction
 from recruitment_insights.infrastructure.sources import BundledPublicSource, GreenhouseSource, parse_csv
 from recruitment_insights.infrastructure.resume_documents import validate_document
@@ -24,6 +25,7 @@ class Store:
         self.uow = self.database.uow
         self.queries = Queries(self.uow)
         self.accounts = Accounts(self)
+        self.onboarding = Onboarding(self.uow)
         self.importer = ImportService(self.uow, GreenhouseSource(), parse_csv,
                                       BundledPublicSource(ROOT/'data/public_jobs.json').read)
         self.job_service = JobService(self.uow, self.importer)
