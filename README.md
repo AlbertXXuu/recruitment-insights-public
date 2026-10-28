@@ -13,7 +13,14 @@
 
 ## 本地运行
 
-需要 Python ≥3.11、支持 JSON 的 SQLite ≥3.38；PDF 结构校验依赖 `pypdf==6.21.2`。无需 Node.js 构建，也无需域名、Cloudflare 或已有数据库。获得此目录或克隆未来的公开仓库后，在项目根目录执行：
+需要 Python ≥3.11、支持 JSON 的 SQLite ≥3.38；PDF 结构校验依赖 `pypdf==6.21.2`。无需 Node.js 构建，也无需域名、Cloudflare 或已有数据库。克隆本仓库并进入项目目录：
+
+```sh
+git clone https://github.com/AlbertXXuu/recruitment-insights-public.git
+cd recruitment-insights-public
+```
+
+随后在项目根目录执行：
 
 Windows PowerShell：
 
