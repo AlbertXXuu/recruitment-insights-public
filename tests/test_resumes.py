@@ -21,7 +21,7 @@ from unittest.mock import patch
 from core import Store, normalize
 from recruitment_insights.application.accounts import Accounts
 from recruitment_insights.config import INVITE_SESSION_COOKIE, WebPolicy
-from recruitment_insights.infrastructure.database import MIGRATIONS
+from recruitment_insights.infrastructure.database import MIGRATIONS, SCHEMA_VERSION
 from recruitment_insights.infrastructure.resumes import ResumeRepository
 from recruitment_insights.web.server import make_server
 from scripts.database_backup import copy_database
@@ -332,6 +332,8 @@ class ResumeMigrationTests(unittest.TestCase):
                 database.commit()
                 old_tables = [row[0] for row in database.execute(
                     "SELECT name FROM sqlite_master WHERE type='table' AND name!='schema_migrations'")]
+                old_columns = {name: [row[1] for row in database.execute('PRAGMA table_info(' + name + ')')]
+                               for name in old_tables}
                 before = {name: database.execute('SELECT * FROM ' + name).fetchall() for name in old_tables}
                 before = {name: [tuple(row) for row in rows] for name, rows in before.items()}
                 self.assertNotIn('resumes', old_tables)
@@ -341,10 +343,12 @@ class ResumeMigrationTests(unittest.TestCase):
             for _ in range(2):
                 with migrated.connect() as database:
                     self.assertEqual([row[0] for row in database.execute(
-                        'SELECT version FROM schema_migrations ORDER BY version')], [1, 2, 3, 4])
+                        'SELECT version FROM schema_migrations ORDER BY version')], list(range(1, SCHEMA_VERSION + 1)))
                     self.assertEqual(database.execute('SELECT COUNT(*) FROM resumes').fetchone()[0], 0)
-                    self.assertEqual({name: [tuple(row) for row in database.execute('SELECT * FROM ' + name)]
+                    self.assertEqual({name: [tuple(row) for row in database.execute(
+                        'SELECT ' + ','.join(old_columns[name]) + ' FROM ' + name)]
                                       for name in old_tables}, before)
+                    self.assertEqual(tuple(database.execute('SELECT active,account_version FROM users').fetchone()), (1, 1))
                     self.assertEqual(database.execute('PRAGMA integrity_check').fetchone()[0], 'ok')
                     self.assertEqual(database.execute('PRAGMA foreign_key_check').fetchall(), [])
                 migrated = Store(path)

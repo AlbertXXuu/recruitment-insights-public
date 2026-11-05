@@ -29,9 +29,19 @@ class AccountRepository:
 
     def create(self, values):
         keys = ('username', 'display_name', 'password_hash', 'role', 'org_id', 'can_manage_jobs')
+        # The caller holds a write transaction, so allocation and insertion are
+        # atomic with respect to other creators and roll back together.
+        current = self.db.execute('SELECT next_id FROM user_id_sequence WHERE singleton=1').fetchone()
+        if current is None:
+            raise ValueError('账号编号序列不存在，请检查数据库')
+        highest = self.db.execute('SELECT COALESCE(MAX(id),0) FROM users').fetchone()[0]
+        user_id = max(current[0], highest + 1)
+        if user_id >= 2**63 - 1:
+            raise ValueError('账号编号已达到数据库上限，无法继续创建账号')
+        self.db.execute('UPDATE user_id_sequence SET next_id=? WHERE singleton=1', (user_id + 1,))
         return self.db.execute('''INSERT INTO users(
-            username,display_name,password_hash,role,org_id,can_manage_jobs) VALUES(?,?,?,?,?,?)''',
-            tuple(values[key] for key in keys)).lastrowid
+            id,username,display_name,password_hash,role,org_id,can_manage_jobs) VALUES(?,?,?,?,?,?,?)''',
+            (user_id, *(values[key] for key in keys))).lastrowid
 
     def expire_sessions(self, timestamp):
         self.db.execute('DELETE FROM sessions WHERE expires<?', (timestamp,))
@@ -43,19 +53,69 @@ class AccountRepository:
     def session_user(self, token_hash, timestamp):
         row = self.db.execute('''SELECT u.*,o.name AS org_name FROM sessions s
             JOIN users u ON u.id=s.user_id LEFT JOIN organizations o ON o.id=u.org_id
-            WHERE s.token_hash=? AND s.expires>?''', (token_hash, timestamp)).fetchone()
+            WHERE s.token_hash=? AND s.expires>? AND u.active=1''', (token_hash, timestamp)).fetchone()
         return dict(row) if row else None
 
     def delete_session(self, token_hash):
         self.db.execute('DELETE FROM sessions WHERE token_hash=?', (token_hash,))
 
     def members(self, org_id):
-        return [dict(row) for row in self.db.execute('''SELECT id,username,display_name,can_manage_jobs
-            FROM users WHERE org_id=? AND role='hr' ORDER BY id''', (org_id,))]
+        return [dict(row) for row in self.db.execute('''SELECT id,username,display_name,can_manage_jobs,account_version AS version
+            FROM users WHERE org_id=? AND role='hr' AND active=1 ORDER BY id''', (org_id,))]
 
     def grant(self, user_id, org_id, allowed):
-        return bool(self.db.execute('''UPDATE users SET can_manage_jobs=?
-            WHERE id=? AND org_id=? AND role='hr' ''', (int(allowed), user_id, org_id)).rowcount)
+        return bool(self.db.execute('''UPDATE users SET can_manage_jobs=?,account_version=account_version+1
+            WHERE id=? AND org_id=? AND role='hr' AND active=1 ''', (int(allowed), user_id, org_id)).rowcount)
+
+    def management_list(self, query, role, status, offset):
+        conditions, args = [], []
+        if query:
+            # Literal substring rather than SQL LIKE metacharacters.
+            conditions.append('(instr(lower(u.username),lower(?))>0 OR instr(lower(u.display_name),lower(?))>0 OR instr(lower(COALESCE(o.name,\'\')),lower(?))>0)')
+            args.extend([query, query, query])
+        if role:
+            conditions.append('u.role=?')
+            args.append(role)
+        if status:
+            conditions.append('u.active=?')
+            args.append(1 if status == 'active' else 0)
+        where = ' AND '.join(conditions) or '1=1'
+        base = ' FROM users u LEFT JOIN organizations o ON o.id=u.org_id WHERE ' + where
+        total = self.db.execute('SELECT count(*)' + base, args).fetchone()[0]
+        fields = 'u.id,u.username,u.display_name,u.role,u.org_id,o.name AS org_name,u.can_manage_jobs,u.active,u.account_version AS version'
+        rows = self.db.execute('SELECT ' + fields + base + ' ORDER BY u.id LIMIT 20 OFFSET ?', (*args, offset))
+        return [dict(row) for row in rows], total
+
+    def management_edit(self, user_id, name, can_manage):
+        self.db.execute('UPDATE users SET display_name=?,can_manage_jobs=?,account_version=account_version+1 WHERE id=?',
+                        (name, int(can_manage), user_id))
+
+    def management_status(self, user_id, active, is_hr):
+        self.db.execute('''UPDATE users SET active=?,can_manage_jobs=CASE WHEN ? THEN 0 ELSE can_manage_jobs END,
+            account_version=account_version+1 WHERE id=?''', (int(active), int(is_hr and not active), user_id))
+        if not active:
+            self.db.execute('DELETE FROM sessions WHERE user_id=?', (user_id,))
+
+    def active_admin_count(self):
+        return self.db.execute("SELECT count(*) FROM users WHERE role='admin' AND active=1").fetchone()[0]
+
+    def deletion_blockers(self, user_id):
+        checks = (
+            ('field_reviews', 'user_id', '字段核验记录'),
+            ('duplicate_decisions', 'user_id', '重复岗位判断记录'),
+            ('audit_events', 'user_id', '操作审计记录'),
+            ('enterprise_applications', 'applicant_id', '企业入驻申请'),
+            ('enterprise_applications', 'reviewer_id', '企业入驻审核记录'),
+            ('enterprise_application_events', 'actor_id', '企业入驻历史记录'),
+        )
+        return [description for table, column, description in checks if self.db.execute(
+            'SELECT 1 FROM ' + table + ' WHERE ' + column + '=? LIMIT 1', (user_id,)).fetchone()]
+
+    def delete_account(self, user_id):
+        for table in ('sessions', 'favorites', 'resumes'):
+            self.db.execute('DELETE FROM ' + table + ' WHERE user_id=?', (user_id,))
+        if self.db.execute('DELETE FROM users WHERE id=?', (user_id,)).rowcount != 1:
+            raise ValueError('账号不存在')
 
     def favorites(self, user_id):
         return {row['job_id']: row['note'] for row in self.db.execute(

@@ -9,7 +9,7 @@ from .reviews import ReviewRepository
 from .resumes import ResumeRepository
 from .onboarding import OnboardingRepository
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 6
 BASE_SCHEMA = '''
 CREATE TABLE IF NOT EXISTS organizations(id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE);
 CREATE TABLE IF NOT EXISTS runs(id INTEGER PRIMARY KEY, started_at TEXT NOT NULL, source TEXT NOT NULL,
@@ -51,7 +51,7 @@ REQUIRED_COLUMNS = {
              'manual_inactive','lifecycle_reason','lifecycle_updated_at','lifecycle_version'},
     'runs': {'id','started_at','source','label','status','result','owner_org_id'},
     'revisions': {'id','job_id','run_id','observed_at','payload','raw'},
-    'users': {'id','username','display_name','password_hash','role','org_id','can_manage_jobs'},
+    'users': {'id','username','display_name','password_hash','role','org_id','can_manage_jobs','active','account_version'},
     'sessions': {'token_hash','user_id','expires'},
     'favorites': {'user_id','job_id','note'},
     'audit_events': {'id','user_id','org_id','action','target','created','details'},
@@ -61,6 +61,7 @@ REQUIRED_COLUMNS = {
     'enterprise_applications': {'id','applicant_id','company_name','name_key','contact_name','contact','website',
         'description','status','version','org_id','reviewer_id','review_reason','created_at','updated_at'},
     'enterprise_application_events': {'id','application_id','actor_id','created_at','snapshot'},
+    'user_id_sequence': {'singleton','next_id'},
 }
 
 
@@ -125,7 +126,38 @@ def migrate_v4(db):
     db.execute('CREATE INDEX IF NOT EXISTS enterprise_history ON enterprise_application_events(application_id,id)')
 
 
-MIGRATIONS = {1: migrate_v1, 2: migrate_v2, 3: migrate_v3, 4: migrate_v4}
+def migrate_v5(db):
+    db.execute('ALTER TABLE users ADD COLUMN active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1))')
+    db.execute('ALTER TABLE users ADD COLUMN account_version INTEGER NOT NULL DEFAULT 1 CHECK(account_version>0)')
+
+
+def migrate_v6(db):
+    # The high-water mark survives deletes and account resets. SQLite's bare
+    # INTEGER PRIMARY KEY can reuse the highest deleted rowid otherwise.
+    # Historical account events may refer to already removed users; preserve
+    # those IDs too, but never interpret job or batch targets as account IDs.
+    limit = 2**63 - 1
+    highest = max(db.execute('SELECT COALESCE(MAX(id),0) FROM users').fetchone()[0], 0)
+    actions = ('create_hr', 'grant_hr', 'account_edit', 'account_deactivate',
+               'account_restore', 'account_delete')
+    for (value,) in db.execute('SELECT target FROM audit_events WHERE action IN (?,?,?,?,?,?)', actions):
+        if not isinstance(value, str) or not value or any(char < '0' or char > '9' for char in value):
+            continue
+        digits = value.lstrip('0')
+        if not digits:
+            continue
+        if len(digits) > 19 or (len(digits) == 19 and digits > str(limit)):
+            raise ValueError('历史账号编号超出数据库支持范围，无法安全迁移')
+        highest = max(highest, int(digits))
+    if highest >= limit:
+        raise ValueError('账号编号已达到数据库上限，无法安全迁移')
+    db.execute('''CREATE TABLE user_id_sequence(
+        singleton INTEGER PRIMARY KEY CHECK(singleton=1),
+        next_id INTEGER NOT NULL CHECK(next_id>0))''')
+    db.execute('INSERT INTO user_id_sequence(singleton,next_id) VALUES(1,?)', (highest + 1,))
+
+
+MIGRATIONS = {1: migrate_v1, 2: migrate_v2, 3: migrate_v3, 4: migrate_v4, 5: migrate_v5, 6: migrate_v6}
 
 
 class Connection(sqlite3.Connection):

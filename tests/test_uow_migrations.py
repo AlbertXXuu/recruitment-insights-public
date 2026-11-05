@@ -186,19 +186,23 @@ class UnitOfWorkMigrationTests(unittest.TestCase):
         """Project only added columns away; compare every original row and object."""
         objects, old_rows = before
         actual_objects, actual_rows = snapshot(self.path)
-        added_tables = {'resumes', 'enterprise_applications', 'enterprise_application_events'}
-        self.assertEqual([item for item in actual_objects if item[1] != 'jobs' and item[2] not in added_tables],
-                         [item for item in objects if item[1] != 'jobs'])
+        added_tables = {'resumes', 'enterprise_applications', 'enterprise_application_events', 'user_id_sequence'}
+        self.assertEqual([item for item in actual_objects if item[1] not in ('jobs', 'users') and item[2] not in added_tables],
+                         [item for item in objects if item[1] not in ('jobs', 'users')])
         self.assertEqual(set(actual_rows), set(old_rows) | added_tables)
-        for table in added_tables:
+        for table in added_tables - {'user_id_sequence'}:
             self.assertEqual(actual_rows[table], [], 'A legacy migration must not invent new business data')
+        self.assertEqual(actual_rows['user_id_sequence'], [(1, max((row[0] for row in old_rows['users']), default=0)+1)])
         for table in old_rows:
-            if table != 'jobs':
+            if table not in ('jobs', 'users'):
                 self.assertEqual(actual_rows[table], old_rows[table], table)
         with closing(sqlite3.connect(self.path)) as db:
             db.row_factory = sqlite3.Row
             projected = sorted([tuple(row) for row in db.execute('SELECT '+','.join(V1_JOB_COLUMNS)+' FROM jobs')], key=repr)
             self.assertEqual(projected, old_rows['jobs'])
+            users = sorted([tuple(row) for row in db.execute('SELECT id,username,display_name,password_hash,role,org_id,can_manage_jobs FROM users')], key=repr)
+            self.assertEqual(users, old_rows['users'])
+            self.assertTrue(all(tuple(row) == (1, 1) for row in db.execute('SELECT active,account_version FROM users')))
             self.assertEqual({row['name'] for row in db.execute('PRAGMA table_info(jobs)')},
                              set(V1_JOB_COLUMNS) | V2_JOB_FIELDS)
             for row in db.execute('SELECT * FROM jobs'):

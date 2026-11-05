@@ -54,7 +54,7 @@ class OnboardingRepository:
             raise ConflictError('企业名称已存在，请重新核对申请') from exc
 
     def promote(self, user_id, org_id):
-        self.db.execute("UPDATE users SET role='boss',org_id=? WHERE id=? AND role='candidate' AND org_id IS NULL", (org_id, user_id))
+        self.db.execute("UPDATE users SET role='boss',org_id=?,account_version=account_version+1 WHERE id=? AND role='candidate' AND org_id IS NULL AND active=1", (org_id, user_id))
 
     def has_personal_data(self, user_id):
         return any(self.db.execute('SELECT 1 FROM '+table+' WHERE user_id=? LIMIT 1', (user_id,)).fetchone()

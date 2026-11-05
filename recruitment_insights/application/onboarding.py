@@ -126,7 +126,7 @@ class Onboarding:
             if row['status'] != 'pending':
                 raise ConflictError('该申请已处理，请刷新列表')
             applicant = tx.accounts.get(row['applicant_id'])
-            if not applicant or applicant['role'] != 'candidate' or applicant['org_id'] is not None:
+            if not applicant or not applicant['active'] or applicant['role'] != 'candidate' or applicant['org_id'] is not None:
                 raise ConflictError('申请人身份已变化，不能继续审批')
             org_id = None
             if decision == 'approved':

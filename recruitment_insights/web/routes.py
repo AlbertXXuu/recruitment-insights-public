@@ -112,6 +112,12 @@ class Routes:
             return Response(200, actor)
         if path == '/api/enterprise-application':
             return Response(200, store.onboarding.mine(actor))
+        if path == '/api/admin/accounts':
+            require_role(actor, 'admin')
+            params = parse_qs(query)
+            return Response(200, accounts.management_list(
+                actor, params.get('q', [''])[0], params.get('role', [''])[0],
+                params.get('status', [''])[0], int(params.get('page', ['1'])[0])))
         if path == '/api/admin/enterprise-applications':
             params = parse_qs(query)
             return Response(200, store.onboarding.queue(actor, int(params.get('page', ['1'])[0])))
@@ -230,6 +236,24 @@ class Routes:
             return Response(200, store.onboarding.change(actor, body))
         if path == '/api/admin/enterprise-applications/review':
             return Response(200, store.onboarding.review(actor, body))
+        if path == '/api/admin/accounts/edit':
+            require_role(actor, 'admin')
+            accounts.management_edit(actor, body)
+            return Response(200, {'message': '账号信息已保存'})
+        if path == '/api/admin/accounts/status':
+            require_role(actor, 'admin')
+            accounts.management_status(actor, body)
+            return Response(200, {'message': '账号状态已更新'})
+        if path == '/api/admin/accounts/delete':
+            require_role(actor, 'admin')
+            accounts.management_delete(actor, body)
+            return Response(200, {'message': '账号已永久删除'})
+        if path == '/api/team/deactivate':
+            require_role(actor, 'boss')
+            if not isinstance(body, dict) or set(body) != {'id', 'version'}:
+                raise ValueError('HR 操作参数无效')
+            accounts.management_status(actor, dict(body, active=False), boss_removal=True)
+            return Response(200, {'message': 'HR 已停用；原有记录保留，恢复后为只读'})
         if path == '/api/auth/logout':
             accounts.logout(token)
             return Response(200, {'message': '已退出'}, headers={

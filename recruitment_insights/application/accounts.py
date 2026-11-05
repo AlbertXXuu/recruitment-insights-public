@@ -7,6 +7,7 @@ import time
 
 from .identity import live_actor
 from .ports import AccountContext
+from recruitment_insights.domain.errors import ConflictError
 
 
 class Accounts:
@@ -89,14 +90,14 @@ class Accounts:
             row = tx.accounts.by_username(username)
         salt, expected = row['password_hash'].split(':') if row else ('0' * 32, '0' * 64)
         actual = hashlib.pbkdf2_hmac('sha256', password.encode(), bytes.fromhex(salt), 240000).hex()
-        if not row or not hmac.compare_digest(actual, expected):
+        if not row or not row['active'] or not hmac.compare_digest(actual, expected):
             raise ValueError('账号或密码错误')
         with self.uow(write=True) as tx:
             # A successful calculation only validates the captured credentials.
             # A deleted/replaced user or changed password must not get a session.
             current = tx.accounts.by_username(username)
             if (not current or current['id'] != row['id'] or
-                    current['password_hash'] != row['password_hash']):
+                    not current['active'] or current['password_hash'] != row['password_hash']):
                 raise ValueError('账号或密码错误')
             token = secrets.token_urlsafe(32)
             timestamp = time.time()
@@ -134,6 +135,105 @@ class Accounts:
             if not tx.accounts.grant(user_id, current['org_id'], allowed):
                 raise PermissionError('无法授权该账号')
             self.audit(tx, current, 'grant_hr', str(user_id))
+
+    @staticmethod
+    def _require_admin(actor):
+        if actor['role'] != 'admin':
+            raise PermissionError('仅管理员可管理全部账号')
+
+    @staticmethod
+    def _management_target(tx, body):
+        if not isinstance(body, dict) or type(body.get('id')) is not int or body['id'] <= 0:
+            raise ValueError('账号 ID 无效')
+        if type(body.get('version')) is not int or body['version'] <= 0:
+            raise ValueError('账号版本无效')
+        target = tx.accounts.get(body['id'])
+        if not target:
+            raise ValueError('账号不存在')
+        if target['account_version'] != body['version']:
+            raise ConflictError('账号已发生变化，请刷新后重试')
+        return target
+
+    def management_list(self, actor, query='', role='', status='', page=1):
+        if not isinstance(query, str) or len(query) > 100:
+            raise ValueError('搜索内容最多 100 字符')
+        if role not in ('', 'admin', 'boss', 'hr', 'candidate') or status not in ('', 'active', 'inactive'):
+            raise ValueError('角色或账号状态筛选无效')
+        if type(page) is not int or not 1 <= page <= 100000:
+            raise ValueError('页码无效')
+        with self.uow() as tx:
+            self._require_admin(live_actor(tx, actor))
+            items, total = tx.accounts.management_list(query.strip(), role, status, (page-1)*20)
+            return {'items': items, 'total': total, 'page': page}
+
+    def management_edit(self, actor, body):
+        if not isinstance(body, dict) or set(body) - {'id', 'version', 'display_name', 'can_manage_jobs'}:
+            raise ValueError('不支持的账号修改字段')
+        name = body.get('display_name')
+        if not isinstance(name, str) or not 1 <= len(name.strip()) <= 60:
+            raise ValueError('显示名称须为 1–60 个字符')
+        with self.uow(write=True) as tx:
+            admin = live_actor(tx, actor)
+            self._require_admin(admin)
+            target = self._management_target(tx, body)
+            allowed = body.get('can_manage_jobs', bool(target['can_manage_jobs']))
+            if not isinstance(allowed, bool) or ('can_manage_jobs' in body and target['role'] != 'hr'):
+                raise ValueError('仅 HR 可以修改岗位维护权限')
+            if not target['active'] and allowed:
+                raise ValueError('停用账号不能授予维护权限')
+            tx.accounts.management_edit(target['id'], name.strip(), allowed)
+            self.audit(tx, admin, 'account_edit', target['id'], {'role': target['role'], 'hr_manage': allowed})
+
+    def management_status(self, actor, body, *, boss_removal=False):
+        if not isinstance(body, dict) or set(body) - {'id', 'version', 'active'}:
+            raise ValueError('不支持的账号状态字段')
+        active = body.get('active')
+        if type(active) is not bool:
+            raise ValueError('账号状态必须为布尔值')
+        with self.uow(write=True) as tx:
+            current = live_actor(tx, actor)
+            if boss_removal:
+                self._require_boss(current)
+            else:
+                self._require_admin(current)
+            target = self._management_target(tx, body)
+            if boss_removal:
+                if active or target['role'] != 'hr' or target['org_id'] != current['org_id']:
+                    raise PermissionError('仅能停用本企业 HR')
+            if not active and target['id'] == current['id']:
+                raise ValueError('不能停用当前账号')
+            if not active and target['role'] == 'boss':
+                raise ValueError('企业负责人需先完成交接；当前暂不支持停用负责人')
+            if not active and target['role'] == 'admin' and tx.accounts.active_admin_count() <= 1:
+                raise ValueError('不能停用最后一名有效管理员')
+            if bool(target['active']) == active:
+                raise ConflictError('账号状态已变化，请刷新后重试')
+            tx.accounts.management_status(target['id'], active, target['role'] == 'hr')
+            self.audit(tx, current, 'account_restore' if active else 'account_deactivate',
+                       target['id'], {'role': target['role'], 'org_id': target['org_id']})
+
+    def management_delete(self, actor, body):
+        if not isinstance(body, dict) or set(body) != {'id', 'version', 'confirm_username'}:
+            raise ValueError('永久删除参数无效')
+        if not isinstance(body['confirm_username'], str):
+            raise ValueError('请输入账号名以确认删除')
+        with self.uow(write=True) as tx:
+            admin = live_actor(tx, actor)
+            self._require_admin(admin)
+            target = self._management_target(tx, body)
+            if target['id'] == admin['id']:
+                raise ValueError('不能删除当前账号')
+            if target['role'] == 'boss':
+                raise ValueError('企业负责人需要先完成交接，当前不能永久删除')
+            if target['active']:
+                raise ValueError('请先停用账号，再永久删除')
+            if target['username'] != body['confirm_username']:
+                raise ValueError('确认账号名不一致，请重新输入')
+            blockers = tx.accounts.deletion_blockers(target['id'])
+            if blockers:
+                raise ValueError('该账号关联共享历史（' + '、'.join(blockers) + '），暂不能永久删除')
+            tx.accounts.delete_account(target['id'])
+            self.audit(tx, admin, 'account_delete', target['id'], {'role': target['role'], 'org_id': target['org_id']})
 
     @staticmethod
     def audit(db_or_tx, actor, action, target, details=None):

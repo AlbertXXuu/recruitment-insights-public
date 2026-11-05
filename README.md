@@ -7,6 +7,7 @@
 - 求职者注册、登录、独立身份显示；岗位检索、图表筛选、导出、收藏和私人备注。
 - 企业工作账号申请入驻、管理员驳回/审批、申请人修改重提；审批后成为企业负责人。
 - 企业负责人创建/编辑/发布/下架岗位，管理本企业 HR 维护权；可维护与只读 HR 的写入权限实时生效。
+- 管理员查看、筛选、编辑、停用和恢复账号；符合条件的停用账号可在核对账号名后永久删除。
 - 企业、个人和公开数据隔离；管理员 CSV 导入、来源更新、质量检查、学历/经验核验与疑似重复处理。
 - 求职者本人 PDF/DOCX 简历上传、替换、原件下载与持久保存；上限 2 MiB，仅本人可访问。
 - SQLite 迁移、事务、备份恢复工具；可选 HTTPS 邀请部署控制台。
@@ -56,13 +57,17 @@ python3 -m venv .venv
 
 需要体验个人注册时，在登录页创建普通求职者；服务端固定最低权限。企业申请通过 `/join` 创建独立工作账号，管理员在 `/enterprise-review` 审核；通过后申请账号成为负责人，再由负责人创建和授权 HR。申请人不能自行选择企业或管理员权限。仅演示已有角色时使用上表账号即可。流程和限制见 [企业入驻](docs/ENTERPRISE_ONBOARDING.md)。企业岗位默认草稿，负责人发布后求职者才能查看；本地演示应保留“模拟 / 测试岗位”标记。
 
+管理员登录后打开“账号管理”。停用会立即使原会话失效，恢复 HR 后需重新授予维护权。企业负责人可停用本企业 HR。当前管理员、企业负责人以及关联共享历史的账号不能通过永久删除移除。
+
+从旧版升级时，先正常停止旧服务并保留离线数据库备份，再以原库的独立副本运行本地应用验证 v4→v6 迁移。迁移保留原账号并补上状态和版本，同时避免永久删除后复用旧账号编号。确认副本正常后再切换使用；已有数据无需重新播种。
+
 ## 验证与工具
 
 使用当前虚拟环境的 Python 运行：
 
 ```sh
 python -m unittest discover -s tests
-node --test tests/test_frontend.cjs tests/test_login.cjs tests/test_resume_frontend.cjs tests/test_onboarding_frontend.cjs
+node --test tests/test_frontend.cjs tests/test_login.cjs tests/test_resume_frontend.cjs tests/test_onboarding_frontend.cjs tests/test_account_management_frontend.cjs tests/test_account_delete_frontend.cjs
 ```
 
 Node.js 仅用于前端测试。3 项旧版 2.2 实现对照测试需要未随此版本分发的私有历史 checkpoint，缺失时明确跳过；当前迁移、事务和权限测试仍执行。macOS/Linux 命令与标准库入口兼容，但本次发行准备只在 Windows 实跑。

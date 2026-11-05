@@ -8,6 +8,7 @@
     <button class="nav active" data-view="overview">数据总览</button>
     <button class="nav" data-view="explore">岗位探索</button>
     <button class="nav" data-view="management" data-roles="admin" hidden>岗位管理</button>
+    <button class="nav" data-view="accounts" data-roles="admin" hidden>账号管理</button>
     <!-- enterprise-review-entry -->
     <button class="nav" data-view="import" data-roles="admin boss hr" hidden>数据接入</button>
     <button class="nav" data-view="provenance" data-roles="admin boss hr" hidden>更新记录</button>
@@ -63,6 +64,19 @@
       <div class="pagination"><button id="management-prev" class="secondary" type="button">上一页</button><span id="management-page-status"></span><button id="management-next" class="secondary" type="button">下一页</button></div>
     </article>
   </section>
+  <section id="accounts" class="view" hidden>
+    <div class="scope-bar management-filters" aria-label="账号管理筛选">
+      <label class="search-label">搜索账号<input id="account-search" type="search" maxlength="100" placeholder="账号、显示名称或企业"></label>
+      <label>角色<select id="account-filter-role"><option value="">全部角色</option><option value="admin">管理员</option><option value="boss">企业负责人</option><option value="hr">HR</option><option value="candidate">求职者</option></select></label>
+      <label>账号状态<select id="account-filter-status"><option value="">全部状态</option><option value="active">启用</option><option value="inactive">已停用</option></select></label>
+      <button id="account-reset" class="quiet" type="button">清空筛选</button>
+    </div>
+    <p class="scope-note">停用后立即退出登录，账号和历史记录会保留。HR 恢复后为只读，须重新授权。</p>
+    <article class="panel"><div class="panel-head"><h2>账号列表 <span id="account-count" class="count"></span></h2><button id="account-refresh" class="secondary" type="button">刷新账号</button></div>
+      <div class="table-scroll"><table class="account-table"><thead><tr><th>账号</th><th>显示名称</th><th>角色</th><th>所属企业</th><th>状态</th><th>操作</th></tr></thead><tbody id="account-rows"><tr><td colspan="6">尚未读取账号。</td></tr></tbody></table></div>
+      <div class="pagination"><button id="account-prev" class="secondary" type="button">上一页</button><span id="account-page-status"></span><button id="account-next" class="secondary" type="button">下一页</button></div>
+    </article>
+  </section>
   <section id="import" class="view" hidden>
     <div class="import-grid">
     <article class="panel"><h2>已授权来源快照</h2><p class="body-text">本发行版不附第三方招聘原文。自行准备有权使用的来源快照后，可按来源与原始岗位 ID 更新；记录保留来源与采集信息。</p><p id="import-ownership" class="body-text"></p><div class="card-actions"><button id="load-public-sample" class="primary" type="button" hidden>载入已授权来源快照</button></div><p class="chart-foot">本地演示请使用课程模拟数据。来源接入方式见项目 docs/DATA_SOURCES.md。</p><details class="method-note"><summary>更新方式与数据边界</summary><div class="source-facts"><p><b>在线更新</b><span>“更新 Cloudflare 岗位”仅读取该公司的技术岗位来源；其他来源由采集脚本更新后重新载入。</span></p><p><b>样本边界</b><span>不同来源提供的字段不同，缺失信息保留为未知。</span></p><p><b>重复处理</b><span>同来源、同岗位 ID 更新；人工下架状态保留。</span></p></div><a href="https://docs.greenhouse.io/job-board.html" target="_blank" rel="noreferrer">公开接口文档</a></details><div class="card-actions"><button id="load-demo" class="secondary" type="button">载入课程模拟数据</button></div><p class="chart-foot">模拟数据用于功能测试，载入后切换到模拟范围。</p></article>
@@ -88,7 +102,7 @@
     </form></article>
   </section>
   <section id="team" class="view" hidden>
-    <article class="panel"><h2>本企业 HR 授权</h2><p class="body-text">授予维护权后，HR 可编辑、导入和发布本企业岗位。撤回权限立即生效。</p><div id="team-members"></div></article>
+    <article class="panel"><h2>本企业 HR 授权</h2><p class="body-text">授予维护权后，HR 可编辑、导入和发布本企业岗位。撤回权限立即生效。移除 HR 会停用账号并退出登录，保留企业归属和历史；如需恢复，请联系管理员，恢复后需重新授权。</p><div id="team-members"></div></article>
     <article class="panel spaced"><h2>添加 HR 账号</h2><form id="team-form"><div class="form-grid"><label>账号<input id="team-username" required minlength="3" maxlength="40" autocomplete="off"></label><label>显示名称<input id="team-name" required maxlength="60"></label><label>初始密码<input id="team-password" type="password" required minlength="10" maxlength="128" autocomplete="new-password"></label></div><label class="check"><input id="team-manage" type="checkbox">授予岗位维护权限</label><button id="team-submit" class="primary">创建 HR 账号</button></form></article>
   </section>
   <section id="favorites" class="view" hidden><div id="favorite-cards" class="favorite-grid"></div></section>
@@ -124,6 +138,13 @@
   <div class="lifecycle-content"><h2 id="lifecycle-title"></h2><p id="lifecycle-context" class="body-text"></p><p id="lifecycle-explanation" class="body-text"></p>
     <div id="lifecycle-notice" class="notice" role="status" aria-live="polite" hidden></div>
     <form id="lifecycle-form"><label id="lifecycle-reason-label">下架原因<textarea id="lifecycle-reason" rows="4" minlength="1" maxlength="500" required placeholder="填写下架原因，例如：岗位已招满或信息需要修正"></textarea></label><p id="lifecycle-help" class="review-help">原因与操作记录会保存，之后可恢复岗位。</p><div class="card-actions"><button id="lifecycle-submit" class="primary" type="submit">确认下架</button><button id="cancel-lifecycle" class="secondary" type="button">取消</button></div></form>
+  </div>
+</dialog>
+<dialog id="account-dialog" aria-labelledby="account-dialog-heading">
+  <div class="dialog-head"><span id="account-dialog-heading">账号管理</span><button id="account-dialog-close" type="button">关闭</button></div>
+  <div class="lifecycle-content"><h2 id="account-dialog-title"></h2><p id="account-dialog-explanation" class="body-text"></p>
+    <div id="account-dialog-notice" class="notice" role="status" aria-live="polite" hidden></div>
+    <form id="account-dialog-form"><div id="account-edit-fields" hidden><label>显示名称<input id="account-edit-name" maxlength="60" autocomplete="off"></label><label id="account-edit-manage-label" class="check" hidden><input id="account-edit-manage" type="checkbox">授予岗位维护权限</label></div><div id="account-delete-fields" hidden><label>输入完整账号名以确认<input id="account-delete-confirm" maxlength="100" autocomplete="off" spellcheck="false" aria-describedby="account-dialog-explanation"></label></div><div class="card-actions"><button id="account-dialog-submit" class="primary" type="submit">确认</button><button id="account-dialog-cancel" class="secondary" type="button">取消</button></div></form>
   </div>
 </dialog>
 </body></html>

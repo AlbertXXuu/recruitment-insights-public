@@ -1,7 +1,7 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const state = {view:'overview', page:1, duplicatePage:1, managementPage:1, managementSequence:0, companyEditorSequence:0, resumeSequence:0, resumeBusy:false, skill:'', stats:null, sequence:0, noticeKind:'action'};
+const state = {view:'overview', page:1, duplicatePage:1, managementPage:1, managementSequence:0, accountPage:1, accountSequence:0, accountBusy:false, companyEditorSequence:0, resumeSequence:0, resumeBusy:false, skill:'', stats:null, sequence:0, noticeKind:'action'};
 const names = {overview:['数据总览','数据总览','查看当前样本的地区、岗位、技能与招聘要求分布。'],explore:['岗位探索','岗位探索','筛选岗位，查看招聘要求、来源和原始描述。'],import:['数据接入','数据接入','接入公开招聘数据，或导入已整理的 CSV 文件。'],provenance:['更新记录','更新记录','查看数据更新结果、异常记录与关键操作。']};
 const sourceLabel = value => ({'greenhouse:cloudflare':'Cloudflare','greenhouse:datadog':'Datadog','greenhouse:stripe':'Stripe','greenhouse:figma':'Figma','ashby:openai':'OpenAI','lever:palantir':'Palantir','tencent:public-cn':'腾讯'})[value] || value;
 function notice(message, error=false, kind='action'){state.noticeKind=kind;$('notice').textContent=message;$('notice').className='notice'+(error?' error':'');$('notice').hidden=false;}
@@ -17,7 +17,7 @@ function salaryLabel(job){
   }
   return '未披露';
 }
-function switchView(view){if(view==='resume'&&state.user?.role!=='candidate')return;state.view=view;for(const el of document.querySelectorAll('.view'))el.hidden=el.id!==view;for(const el of document.querySelectorAll('.nav')){el.classList.toggle('active',el.dataset.view===view);el.setAttribute('aria-current',el.dataset.view===view?'page':'false');}const [,title,description]=names[view];$('page-title').textContent=title;$('page-description').textContent=description;const scoped=['overview','explore','quality'].includes(view);document.querySelector('.scope-bar').hidden=!scoped;$('scope-note').hidden=!scoped;refreshView().catch(e=>notice(e.message,true));}
+function switchView(view){if(view==='resume'&&state.user?.role!=='candidate')return;if(view==='accounts'&&state.user?.role!=='admin')return;state.view=view;for(const el of document.querySelectorAll('.view'))el.hidden=el.id!==view;for(const el of document.querySelectorAll('.nav')){el.classList.toggle('active',el.dataset.view===view);el.setAttribute('aria-current',el.dataset.view===view?'page':'false');}const [,title,description]=names[view];$('page-title').textContent=title;$('page-description').textContent=description;const scoped=['overview','explore','quality'].includes(view);document.querySelector('.scope-bar').hidden=!scoped;document.querySelector('.source-action').hidden=view==='accounts';$('scope-note').hidden=!scoped;refreshView().catch(e=>notice(e.message,true));}
 function bars(id, items, field){const list=['education','experience'].includes(field)?items:items.slice(0,7);const max=Math.max(...list.map(x=>x.count),1);$(id).innerHTML=list.length?list.map(item=>`<button class="bar-row${/未知|未披露|未发现明确要求|待核验|待复核/.test(item.name)?' is-neutral':''}" data-field="${field}" data-value="${escapeHtml(item.name)}" title="${escapeHtml(item.name)}：${item.count} 条记录"><span class="bar-label">${escapeHtml(item.name)}</span><span class="bar-track"><span class="bar-fill" style="display:block;width:${item.count/max*100}%"></span></span><span class="bar-count">${item.count}</span></button>`).join(''):'<div class="empty"><strong>当前筛选下暂无可用数据</strong><span>可清空筛选，或选择课程模拟数据查看样本。</span></div>';}
 function renderSalary(){const data=state.stats?.salaries.find(x=>x.currency===$('currency').value);if(!data)return;$('salary-summary').innerHTML=`<div class="salary-kpi">${data.median===null?'—':data.median.toLocaleString('zh-CN',{maximumFractionDigits:0})}<small>月薪区间中点的中位数 · ${data.valid} 个有效样本</small></div>`;if(!data.valid){$('salary-chart').className='empty';$('salary-chart').textContent='该币种暂无可比较薪资；缺失不按 0 处理。';return;}$('salary-chart').className='columns';const max=Math.max(...data.bins.map(x=>x.count),1);$('salary-chart').innerHTML=data.bins.map(x=>`<div class="column"><span>${x.count}</span><div class="column-fill" style="height:${x.count/max*85}px"></div><span class="column-label">${x.name}</span></div>`).join('');}
 function renderStats(stats){
@@ -190,6 +190,7 @@ $('export').addEventListener('click',()=>{window.location.href='/api/export?'+fi
 $('refresh-runs').addEventListener('click',()=>refreshView().catch(e=>notice(e.message,true)));
 Object.assign(names,{
   management:['岗位管理','岗位管理','查看全部来源记录，人工下架岗位或解除下架状态。'],
+  accounts:['账号管理','账号管理','查看账号、编辑名称或管理账号状态。'],
   quality:['数据质量','数据质量','查看缺失与异常，核验学历、经验及疑似重复岗位。'],
   company:['企业岗位','企业岗位','管理本企业岗位，保存草稿、发布或停用。'],
   team:['成员授权','成员授权','添加本企业 HR 账号，管理岗位维护权限。'],
@@ -223,6 +224,7 @@ async function startApp(){
     if(state.user.org_id)$('scope').value='company';
     if(state.user.role==='candidate')switchView('explore');
     else if(state.user.org_id)switchView('company');
+    if(state.user.role==='admin'&&window.location?.hash==='#accounts')switchView('accounts');
     await load(true);
   }
   catch(e){notice(e.message,true);}
@@ -233,6 +235,7 @@ async function refreshView(){
   if(state.view==='quality')await load();
   if(state.view==='company')await loadCompany();
   if(state.view==='management')await loadManagement();
+  if(state.view==='accounts')await loadAccounts();
   if(state.view==='team')await loadTeam();
   if(state.view==='favorites')await loadFavorites();
   if(state.view==='resume')await loadResume();
@@ -479,7 +482,70 @@ async function editCompanyJob(id){
 
 async function loadTeam(){
   const members=await api('/api/team');
-  $('team-members').innerHTML=members.map(m=>`<div class="member-row"><div><strong>${escapeHtml(m.display_name)}</strong><p class="body-text">${escapeHtml(m.username)} · ${m.can_manage_jobs?'可维护岗位':'只读'}</p></div><button class="secondary" data-member="${m.id}" data-allow="${!m.can_manage_jobs}">${m.can_manage_jobs?'收回维护权':'授予维护权'}</button></div>`).join('')||'<p class="body-text">尚未添加 HR。</p>';
+  state.teamMembers=members;
+  $('team-members').innerHTML=members.map(m=>`<div class="member-row"><div><strong>${escapeHtml(m.display_name)}</strong><p class="body-text">${escapeHtml(m.username)} · ${m.can_manage_jobs?'可维护岗位':'只读'}</p></div><div class="card-actions"><button class="secondary" data-member="${Number(m.id)}" data-allow="${!m.can_manage_jobs}">${m.can_manage_jobs?'收回维护权':'授予维护权'}</button><button class="secondary" data-remove-member="${Number(m.id)}">移除 HR</button></div></div>`).join('')||'<p class="body-text">尚未添加 HR。</p>';
+}
+
+const accountRoles={admin:'管理员',boss:'企业负责人',hr:'HR',candidate:'求职者'};
+function accountActions(row){
+  const current=row.id===state.user.id, boss=row.role==='boss';
+  const buttons=[`<button class="secondary" type="button" data-account-edit="${Number(row.id)}">编辑</button>`];
+  if(!current&&!(boss&&row.active))buttons.push(`<button class="secondary" type="button" data-account-status="${Number(row.id)}">${row.active?'停用':'恢复'}</button>`);
+  if(!row.active&&!current&&!boss)buttons.push(`<button class="secondary" type="button" data-account-delete="${Number(row.id)}">永久删除</button>`);
+  const note=current?'当前账号':boss?'负责人需先交接':'';
+  return `<div class="account-actions${note?' has-note':''}"><div class="account-action-buttons">${buttons.join('')}</div>${note?`<p class="account-action-note">${note}</p>`:''}</div>`;
+}
+async function loadAccounts(){
+  if(state.user?.role!=='admin')return;
+  const seq=++state.accountSequence;
+  const params=new URLSearchParams({page:String(state.accountPage),q:$('account-search').value.trim(),role:$('account-filter-role').value,status:$('account-filter-status').value});
+  $('account-rows').innerHTML='<tr><td colspan="6">正在读取账号…</td></tr>';
+  try{
+    const data=await api('/api/admin/accounts?'+params);
+    if(seq!==state.accountSequence)return;
+    const lastPage=Math.max(1,Math.ceil(data.total/20));
+    if(data.page>lastPage){state.accountPage=lastPage;return loadAccounts();}
+    state.accountItems=data.items;state.accountPage=data.page;
+    $('account-count').textContent=`${data.total} 个`;
+    $('account-page-status').textContent=`第 ${data.page} / ${Math.max(1,Math.ceil(data.total/20))} 页 · 共 ${data.total} 个`;
+    $('account-prev').disabled=data.page<=1;$('account-next').disabled=data.page*20>=data.total;
+    $('account-rows').innerHTML=data.items.map(row=>`<tr><td>${escapeHtml(row.username)}</td><td>${escapeHtml(row.display_name)}</td><td>${escapeHtml(accountRoles[row.role]||row.role)}${row.role==='hr'?`<small>${row.can_manage_jobs?'可维护岗位':'只读'}</small>`:''}</td><td>${escapeHtml(row.org_name||'—')}</td><td>${row.active?'启用':'已停用'}</td><td>${accountActions(row)}</td></tr>`).join('')||'<tr><td colspan="6"><div class="empty">没有匹配的账号，可调整筛选条件。</div></td></tr>';
+  }catch(error){if(seq!==state.accountSequence)return;$('account-rows').innerHTML='<tr><td colspan="6">读取失败，请点击刷新账号重试。</td></tr>';throw error;}
+}
+function closeAccountDialog(){if(state.accountBusy)return;state.accountAction=null;$('account-dialog').close();}
+function openAccountDialog(row,kind){
+  if(!row||state.accountBusy)return;
+  state.accountAction={row,kind};
+  $('account-dialog-notice').hidden=true;$('account-dialog-notice').textContent='';
+  $('account-dialog-title').textContent=(kind==='edit'?'编辑账号':kind==='remove'?'移除 HR':kind==='delete'?'永久删除账号':row.active?'停用账号':'恢复账号')+'：'+row.username;
+  $('account-edit-fields').hidden=kind!=='edit';$('account-edit-name').required=kind==='edit';
+  $('account-edit-name').value=row.display_name||'';$('account-edit-manage-label').hidden=kind!=='edit'||row.role!=='hr';$('account-edit-manage').checked=!!row.can_manage_jobs;
+  $('account-delete-fields').hidden=kind!=='delete';$('account-delete-confirm').required=kind==='delete';$('account-delete-confirm').value='';
+  $('account-dialog-explanation').textContent=kind==='edit'?'可修改显示名称；HR 的岗位维护权也可在此调整。账号角色与企业归属保持不变。':kind==='remove'?'移除会停用该 HR 并立即结束登录，保留企业归属和历史。仅管理员可恢复，恢复后为只读，需重新授权。':kind==='delete'?'永久删除后，当前数据库中的账号、简历和收藏将被删除，登录会话失效，无法从系统恢复。企业、岗位和共享历史保留；如存在无法处理的关联，系统会阻止删除。以前的备份可能仍保留副本。':row.active?'停用后立即结束该账号的登录；账号、企业归属和历史保留，可由管理员恢复。HR 恢复后为只读。':'恢复后可重新登录；HR 为只读，需要重新授予维护权。';
+  $('account-dialog-submit').textContent=kind==='edit'?'保存修改':kind==='remove'?'确认移除':kind==='delete'?'永久删除':row.active?'确认停用':'确认恢复';
+  $('account-dialog-submit').disabled=kind==='delete';
+  $('account-dialog').showModal();if(kind==='edit')$('account-edit-name').focus();else if(kind==='delete')$('account-delete-confirm').focus();else $('account-dialog-cancel').focus();
+}
+async function saveAccountAction(){
+  const actionData=state.accountAction;if(!actionData||state.accountBusy)return;
+  const {row,kind}=actionData;
+  if(kind==='delete'&&$('account-delete-confirm').value!==row.username){$('account-dialog-notice').textContent='请输入完整且一致的账号名。';$('account-dialog-notice').className='notice error';$('account-dialog-notice').hidden=false;return;}
+  state.accountBusy=true;$('account-dialog-submit').disabled=true;$('account-dialog-cancel').disabled=true;$('account-dialog-close').disabled=true;
+  try{
+    const base={id:Number(row.id),version:Number(row.version)};
+    if(kind==='edit')await api('/api/admin/accounts/edit',{...base,display_name:$('account-edit-name').value.trim(),...(row.role==='hr'?{can_manage_jobs:$('account-edit-manage').checked}:{})});
+    else if(kind==='remove')await api('/api/team/deactivate',base);
+    else if(kind==='delete')await api('/api/admin/accounts/delete',{...base,confirm_username:$('account-delete-confirm').value});
+    else await api('/api/admin/accounts/status',{...base,active:!row.active});
+    state.accountBusy=false;closeAccountDialog();
+    const success=kind==='edit'?'账号信息已保存。':kind==='remove'?'HR 已移除并停用，可由管理员恢复。':kind==='delete'?'账号已永久删除。':row.active?'账号已停用，现有登录已失效。':'账号已恢复；HR 恢复后为只读。';
+    notice(success);
+    try{if(kind==='remove')await loadTeam();else await loadAccounts();}
+    catch(error){notice(success+' 列表刷新失败，请手动刷新：'+error.message,true);}
+  }catch(error){
+    $('account-dialog-notice').textContent=error.status===409?`${error.message} 请关闭并刷新列表后重试。`:error.message;
+    $('account-dialog-notice').className='notice error';$('account-dialog-notice').hidden=false;
+  }finally{state.accountBusy=false;$('account-dialog-submit').disabled=kind==='delete'&&$('account-delete-confirm').value!==row.username;$('account-dialog-cancel').disabled=false;$('account-dialog-close').disabled=false;}
 }
 
 async function loadFavorites(){
@@ -488,6 +554,23 @@ async function loadFavorites(){
 }
 
 $('logout').addEventListener('click',()=>action($('logout'),async()=>{await api('/api/auth/logout',{});window.location.assign('/login');}));
+function reloadAccounts(){return loadAccounts().catch(error=>notice('读取账号失败：'+error.message,true));}
+for(const id of ['account-filter-role','account-filter-status'])$(id).addEventListener('change',()=>{state.accountPage=1;reloadAccounts();});
+let accountSearchTimer;
+$('account-search').addEventListener('input',()=>{clearTimeout(accountSearchTimer);state.accountSequence++;accountSearchTimer=setTimeout(()=>{state.accountPage=1;reloadAccounts();},250);});
+$('account-reset').addEventListener('click',()=>{clearTimeout(accountSearchTimer);$('account-search').value='';$('account-filter-role').value='';$('account-filter-status').value='';state.accountPage=1;reloadAccounts();});
+$('account-refresh').addEventListener('click',()=>reloadAccounts());
+$('account-prev').addEventListener('click',()=>{state.accountPage=Math.max(1,state.accountPage-1);reloadAccounts();});
+$('account-next').addEventListener('click',()=>{state.accountPage++;reloadAccounts();});
+$('account-rows').addEventListener('click',event=>{
+  const button=event.target.closest('[data-account-edit], [data-account-status], [data-account-delete]');if(!button)return;
+  const id=Number(button.dataset.accountEdit||button.dataset.accountStatus||button.dataset.accountDelete),row=state.accountItems?.find(item=>Number(item.id)===id);
+  if(row)openAccountDialog(row,button.dataset.accountEdit?'edit':button.dataset.accountDelete?'delete':'status');
+});
+$('account-delete-confirm').addEventListener('input',()=>{const active=state.accountAction;$('account-dialog-submit').disabled=!!state.accountBusy||!active||active.kind!=='delete'||$('account-delete-confirm').value!==active.row.username;});
+$('account-dialog-form').addEventListener('submit',event=>{event.preventDefault();saveAccountAction();});
+for(const id of ['account-dialog-close','account-dialog-cancel'])$(id).addEventListener('click',closeAccountDialog);
+$('account-dialog').addEventListener('cancel',event=>{if(state.accountBusy)event.preventDefault();else state.accountAction=null;});
 function reloadManagement(){return loadManagement().catch(e=>notice(e.status===403?'当前账号没有岗位管理权限，请检查登录身份。':'读取岗位管理数据失败：'+e.message,true));}
 for(const id of ['management-dataset','management-status'])$(id).addEventListener('change',()=>{state.managementPage=1;reloadManagement();});
 let managementTimer;
@@ -530,6 +613,7 @@ $('company-form').addEventListener('submit',event=>{event.preventDefault();actio
   $('company-editor').hidden=true;notice(`岗位 #${result.id} 已保存，${!result.active?'已停用':result.published?'已发布到普通端':'保留为企业草稿'}。`);await loadCompany();await load(true);
 });});
 $('team-members').addEventListener('click',event=>{const button=event.target.closest('[data-member]');if(button)action(button,async()=>{await api('/api/team',{id:Number(button.dataset.member),can_manage:button.dataset.allow==='true'});notice('授权已更新，对下一次操作立即生效。');await loadTeam();});});
+$('team-members').addEventListener('click',event=>{const button=event.target.closest('[data-remove-member]');if(!button)return;const row=state.teamMembers?.find(item=>Number(item.id)===Number(button.dataset.removeMember));if(row)openAccountDialog(row,'remove');});
 $('team-form').addEventListener('submit',event=>{event.preventDefault();action($('team-submit'),async()=>{try{await api('/api/team',{username:$('team-username').value,display_name:$('team-name').value,password:$('team-password').value,can_manage:$('team-manage').checked});$('team-form').reset();notice('HR 账号已创建。');await loadTeam();}finally{$('team-password').value='';}});});
 $('detail-content').addEventListener('click',event=>{const button=event.target.closest('[data-save-favorite]');if(button)action(button,async()=>{await api('/api/favorites',{job_id:Number(button.dataset.saveFavorite)});button.dataset.saved='true';$('detail').close();notice('已收藏，可在“我的收藏”填写个人备注。');if(state.view==='favorites')await loadFavorites();});});
 $('detail-content').addEventListener('submit',event=>{

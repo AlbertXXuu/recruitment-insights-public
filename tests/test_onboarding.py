@@ -122,7 +122,10 @@ class OnboardingTests(unittest.TestCase):
         with closing(sqlite3.connect(self.path)) as db:
             db.execute('DROP TABLE enterprise_application_events')
             db.execute('DROP TABLE enterprise_applications')
-            db.execute('DELETE FROM schema_migrations WHERE version=4')
+            db.execute('ALTER TABLE users DROP COLUMN account_version')
+            db.execute('ALTER TABLE users DROP COLUMN active')
+            db.execute('DROP TABLE user_id_sequence')
+            db.execute('DELETE FROM schema_migrations WHERE version>=4')
             db.commit()
         Database(self.path).initialize()
         self.assertEqual(self.store.accounts.user(self.token)['username'],'reviewer')
